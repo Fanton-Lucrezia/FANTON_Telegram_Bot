@@ -22,6 +22,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.List;
 
+/**
+ * Bot Telegram semplificato per OpenFDA.
+ * Gestisce i comandi principali e interagisce con il database SQLite.
+ */
 public class MedBot implements LongPollingSingleThreadUpdateConsumer {
     private static final Logger logger = LoggerFactory.getLogger(MedBot.class);
     private final TelegramClient telegramClient;
@@ -75,7 +79,7 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
             case "/help" -> handleHelp(chatId);
             case "/cerca", "/searchdrug" -> handleSearchDrug(chatId, args);
             case "/richiami", "/recalls" -> handleRecalls(chatId, args);
-            case "/stats", "/mystats" -> handleMyStats(chatId);
+            case "/mystats" -> handleMyStats(chatId);
             default -> sendMessage(chatId, "❓ Comando sconosciuto. Usa /help per la lista dei comandi.");
         }
     }
@@ -83,7 +87,11 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
     private void handleStart(long chatId, String username) {
         String welcome = String.format(
                 "👋 Benvenuto <b>%s</b> su OpenFDA MedBot!\n\n" +
-                        "🔬 Questo bot ti aiuta a trovare informazioni su farmaci e richiami FDA.\n\n" +
+                        "🔬 Questo bot utilizza l'<b>API pubblica della FDA</b> (Food and Drug Administration americana) " +
+                        "per fornirti informazioni su farmaci e richiami.\n\n" +
+                        "🇺🇸 <b>Nota importante:</b> I dati provengono da un database americano, quindi " +
+                        "i risultati sono in <b>inglese</b>. Per migliori risultati, cerca i farmaci con il loro " +
+                        "nome inglese (es. 'aspirin' invece di 'aspirina').\n\n" +
                         "📖 Usa /help per vedere tutti i comandi disponibili.",
                 username != null ? username : "utente"
         );
@@ -91,22 +99,26 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
     }
 
     private void handleHelp(long chatId) {
-        String help = "<b>📋 Comandi disponibili:</b>\n\n" +
+        String help = "<b>📋 Lista Comandi</b>\n\n" +
                 "/start - Messaggio di benvenuto\n" +
-                "/help - Mostra questo aiuto\n\n" +
-                "<b>🔍 Cerca farmaci:</b>\n" +
-                "/cerca &lt;nome&gt; - Cerca un farmaco\n" +
-                "/searchdrug &lt;nome&gt; - Stesso di /cerca\n" +
-                "Esempio: <code>/cerca aspirina</code>\n\n" +
-                "<b>⚠️ Richiami FDA:</b>\n" +
-                "/richiami &lt;nome&gt; - Cerca richiami\n" +
-                "/recalls &lt;nome&gt; - Stesso di /richiami\n" +
-                "Esempio: <code>/richiami aspirina</code>\n" +
-                "Oppure: <code>/richiami all</code> (ultimi 10)\n\n" +
-                "<b>📊 Statistiche:</b>\n" +
-                "/stats - Le tue statistiche\n" +
-                "/mystats - Stesso di /stats\n\n" +
-                "💡 <b>Suggerimento:</b> Scrivi il nome del farmaco dopo il comando!";
+                "/help - Mostra questa lista\n\n" +
+                "<b>🔍 Ricerca Farmaci</b>\n" +
+                "/cerca &lt;nome&gt;\n" +
+                "/searchdrug &lt;nome&gt;\n" +
+                "Cerca informazioni su un farmaco specifico.\n" +
+                "Esempio: <code>/cerca aspirin</code>\n\n" +
+                "<b>⚠️ Richiami FDA</b>\n" +
+                "/richiami &lt;nome|all&gt;\n" +
+                "/recalls &lt;nome|all&gt;\n" +
+                "Verifica se ci sono richiami per un farmaco.\n" +
+                "Esempi:\n" +
+                "• <code>/richiami aspirin</code> - richiami per aspirina\n" +
+                "• <code>/richiami all</code> - ultimi 10 richiami\n\n" +
+                "<b>📊 Statistiche Personali</b>\n" +
+                "/mystats - Mostra le tue statistiche d'uso\n\n" +
+                "💡 <b>Suggerimento importante:</b> Usa i nomi dei farmaci in <b>inglese</b> " +
+                "per ottenere risultati migliori!\n" +
+                "Esempi: 'aspirin', 'ibuprofen', 'amoxicillin'";
 
         sendMessage(chatId, help);
     }

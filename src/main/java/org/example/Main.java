@@ -6,10 +6,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.telegram.telegrambots.longpolling.TelegramBotsLongPollingApplication;
 
-/**
- * Main entry point for the OpenFDA MedBot application.
- * Initializes database, configuration, and starts the Telegram bot.
- */
 public class Main {
     private static final Logger logger = LoggerFactory.getLogger(Main.class);
 

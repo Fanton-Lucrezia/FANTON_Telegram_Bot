@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.example.dao.DrugCacheDao;
+import org.example.dao.DatabaseManager;
 import org.example.model.Drug;
 import org.example.model.Recall;
 import org.slf4j.Logger;
@@ -14,56 +14,59 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Service for interacting with the OpenFDA API.
- * Handles drug searches, recalls, and caching.
+ * Service semplificato per interagire con OpenFDA API.
+ * Include caching nel database SQLite.
  */
 public class OpenFdaService {
     private static final Logger logger = LoggerFactory.getLogger(OpenFdaService.class);
     private static final String FDA_BASE_URL = "https://api.fda.gov";
-    private static final int CACHE_TTL_HOURS = 24;
+    private static final int CACHE_HOURS = 24;
 
     private final OkHttpClient httpClient;
     private final ObjectMapper objectMapper;
-    private final DrugCacheDao cacheDao;
+    private final DatabaseManager dbManager;
 
     public OpenFdaService() {
         this.httpClient = new OkHttpClient.Builder()
                 .retryOnConnectionFailure(true)
                 .build();
         this.objectMapper = new ObjectMapper();
-        this.cacheDao = new DrugCacheDao();
+        this.dbManager = DatabaseManager.getInstance();
     }
 
     /**
-     * Search for drugs by name (brand or generic).
-     * Checks cache first, then queries FDA API.
+     * Cerca farmaci per nome (con cache).
      */
     public List<Drug> searchDrug(String searchTerm) throws IOException {
         logger.info("Searching drug: {}", searchTerm);
 
-        // Check cache first
-        Drug cachedDrug = cacheDao.getCachedDrug(searchTerm);
-        if (cachedDrug != null && isCacheValid(cachedDrug.getLastFetched())) {
-            logger.debug("Cache hit for: {}", searchTerm);
-            return List.of(cachedDrug);
+        // Controlla cache
+        Drug cached = getCachedDrug(searchTerm);
+        if (cached != null) {
+            logger.info("Cache HIT for: {}", searchTerm);
+            return List.of(cached);
         }
 
-        // Build search query - search both brand and generic names
+        logger.info("Cache MISS, calling FDA API");
+
+        // Chiama API FDA
         String encodedTerm = URLEncoder.encode(searchTerm, StandardCharsets.UTF_8);
         String query = String.format(
-                "(openfda.brand_name:%s+OR+openfda.generic_name:%s)",
+                "(openfda.brand_name:\"%s\"+OR+openfda.generic_name:\"%s\")",
                 encodedTerm, encodedTerm
         );
 
-        String url = String.format("%s/drug/label.json?search=%s&limit=10",
-                FDA_BASE_URL, query);
+        String url = String.format("%s/drug/label.json?search=%s&limit=10", FDA_BASE_URL, query);
 
-        logger.debug("FDA API URL: {}", url);
+        logger.debug("FDA URL: {}", url);
 
         Request request = new Request.Builder()
                 .url(url)
@@ -72,7 +75,10 @@ public class OpenFdaService {
 
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) {
-                logger.error("FDA API error: {} - {}", response.code(), response.message());
+                logger.warn("FDA API returned: {}", response.code());
+                if (response.code() == 404) {
+                    throw new IOException("404 - Drug not found in FDA database");
+                }
                 throw new IOException("FDA API error: " + response.code());
             }
 
@@ -81,24 +87,25 @@ public class OpenFdaService {
 
             List<Drug> drugs = parseDrugResults(root);
 
-            // Cache the first result
+            // Salva in cache il primo risultato
             if (!drugs.isEmpty()) {
-                cacheDao.saveDrugToCache(drugs.get(0));
+                saveDrugToCache(drugs.get(0));
             }
 
+            logger.info("Found {} drugs", drugs.size());
             return drugs;
         }
     }
 
     /**
-     * Search for FDA enforcement reports (recalls) related to a drug.
+     * Cerca richiami FDA.
      */
     public List<Recall> searchRecalls(String searchTerm) throws IOException {
         logger.info("Searching recalls for: {}", searchTerm);
 
         String encodedTerm = URLEncoder.encode(searchTerm, StandardCharsets.UTF_8);
         String url = String.format(
-                "%s/drug/enforcement.json?search=product_description:%s&limit=20",
+                "%s/drug/enforcement.json?search=product_description:\"%s\"&limit=20",
                 FDA_BASE_URL, encodedTerm
         );
 
@@ -112,7 +119,7 @@ public class OpenFdaService {
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) {
                 if (response.code() == 404) {
-                    logger.info("No recalls found for: {}", searchTerm);
+                    logger.info("No recalls found (404)");
                     return List.of();
                 }
                 throw new IOException("FDA API error: " + response.code());
@@ -121,12 +128,14 @@ public class OpenFdaService {
             String responseBody = response.body().string();
             JsonNode root = objectMapper.readTree(responseBody);
 
-            return parseRecallResults(root);
+            List<Recall> recalls = parseRecallResults(root);
+            logger.info("Found {} recalls", recalls.size());
+            return recalls;
         }
     }
 
     /**
-     * Get recent recalls (all products).
+     * Ottieni ultimi richiami (tutti i farmaci).
      */
     public List<Recall> getRecentRecalls(int limit) throws IOException {
         logger.info("Fetching {} recent recalls", limit);
@@ -153,6 +162,8 @@ public class OpenFdaService {
         }
     }
 
+    // ==================== PARSING ====================
+
     private List<Drug> parseDrugResults(JsonNode root) {
         List<Drug> drugs = new ArrayList<>();
 
@@ -165,35 +176,36 @@ public class OpenFdaService {
             try {
                 Drug drug = new Drug();
 
-                // Extract brand name
                 JsonNode openfda = item.get("openfda");
                 if (openfda != null) {
+                    // Brand name
                     JsonNode brandNames = openfda.get("brand_name");
                     if (brandNames != null && brandNames.isArray() && brandNames.size() > 0) {
                         drug.setBrandName(brandNames.get(0).asText());
                     }
 
+                    // Generic name
                     JsonNode genericNames = openfda.get("generic_name");
                     if (genericNames != null && genericNames.isArray() && genericNames.size() > 0) {
                         drug.setGenericName(genericNames.get(0).asText());
                     }
 
+                    // Manufacturer
                     JsonNode manufacturers = openfda.get("manufacturer_name");
                     if (manufacturers != null && manufacturers.isArray() && manufacturers.size() > 0) {
                         drug.setManufacturer(manufacturers.get(0).asText());
                     }
                 }
 
-                // Extract indications
+                // Indications
                 JsonNode indications = item.get("indications_and_usage");
                 if (indications != null && indications.isArray() && indications.size() > 0) {
                     drug.setIndications(indications.get(0).asText());
                 }
 
-                // Set metadata
                 drug.setLastFetched(LocalDateTime.now());
 
-                // Only add if we have at least a name
+                // Aggiungi solo se ha un nome
                 if (drug.getBrandName() != null || drug.getGenericName() != null) {
                     drugs.add(drug);
                 }
@@ -248,8 +260,68 @@ public class OpenFdaService {
         return recalls;
     }
 
-    private boolean isCacheValid(LocalDateTime lastFetched) {
-        if (lastFetched == null) return false;
-        return lastFetched.plusHours(CACHE_TTL_HOURS).isAfter(LocalDateTime.now());
+    // ==================== CACHE ====================
+
+    private Drug getCachedDrug(String searchTerm) {
+        try (Connection conn = dbManager.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "SELECT * FROM drugs_cache " +
+                             "WHERE (LOWER(brand_name) LIKE LOWER(?) OR LOWER(generic_name) LIKE LOWER(?)) " +
+                             "AND last_fetched > datetime('now', '-' || ? || ' hours') " +
+                             "ORDER BY last_fetched DESC LIMIT 1")) {
+
+            String pattern = "%" + searchTerm + "%";
+            pstmt.setString(1, pattern);
+            pstmt.setString(2, pattern);
+            pstmt.setInt(3, CACHE_HOURS);
+
+            ResultSet rs = pstmt.executeQuery();
+
+            if (rs.next()) {
+                Drug drug = new Drug();
+                drug.setDrugId(rs.getString("drug_id"));
+                drug.setBrandName(rs.getString("brand_name"));
+                drug.setGenericName(rs.getString("generic_name"));
+                drug.setManufacturer(rs.getString("manufacturer"));
+                drug.setIndications(rs.getString("indications"));
+                return drug;
+            }
+
+        } catch (Exception e) {
+            logger.error("Error getting cached drug", e);
+        }
+
+        return null;
+    }
+
+    private void saveDrugToCache(Drug drug) {
+        try (Connection conn = dbManager.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "INSERT OR REPLACE INTO drugs_cache (drug_id, brand_name, generic_name, manufacturer, indications, last_fetched) " +
+                             "VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)")) {
+
+            String drugId = generateDrugId(drug);
+            drug.setDrugId(drugId);
+
+            pstmt.setString(1, drugId);
+            pstmt.setString(2, drug.getBrandName());
+            pstmt.setString(3, drug.getGenericName());
+            pstmt.setString(4, drug.getManufacturer());
+            pstmt.setString(5, drug.getIndications());
+
+            pstmt.executeUpdate();
+            logger.debug("Drug cached: {}", drug.getBrandName());
+
+        } catch (Exception e) {
+            logger.error("Error caching drug", e);
+        }
+    }
+
+    private String generateDrugId(Drug drug) {
+        String name = drug.getBrandName() != null ? drug.getBrandName() : drug.getGenericName();
+        if (name == null) name = "unknown";
+
+        String normalized = name.toLowerCase().replaceAll("[^a-z0-9]", "-");
+        return normalized + "-" + System.currentTimeMillis();
     }
 }

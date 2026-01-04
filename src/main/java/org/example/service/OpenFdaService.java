@@ -42,6 +42,8 @@ public class OpenFdaService {
         this.dbManager = DatabaseManager.getInstance();
     }
 
+    // ==================== CACHE ====================
+
     /**
      * Cerca farmaci per nome (con cache).
      */
@@ -260,7 +262,55 @@ public class OpenFdaService {
         return recalls;
     }
 
-    // ==================== CACHE ====================
+    /**
+     * Verifica se un farmaco è una sostanza controllata (droga).
+     * Restituisce il livello Schedule (I-V) o null se non è controllato.
+     */
+    public String checkDrugSchedule(String drugName) throws IOException {
+        logger.info("Checking drug schedule for: {}", drugName);
+
+        String encodedTerm = URLEncoder.encode(drugName, StandardCharsets.UTF_8);
+
+        // Cerca prima nel database label per ottenere info sulla sostanza
+        String url = String.format(
+                "%s/drug/label.json?search=(openfda.brand_name:\"%s\"+OR+openfda.generic_name:\"%s\")+AND+_exists_:openfda.dea_schedule&limit=1",
+                FDA_BASE_URL, encodedTerm, encodedTerm
+        );
+
+        logger.debug("FDA Schedule URL: {}", url);
+
+        Request request = new Request.Builder()
+                .url(url)
+                .addHeader("User-Agent", "MedBot/1.0")
+                .build();
+
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful() || response.code() == 404) {
+                logger.info("No controlled substance info found");
+                return null;
+            }
+
+            String responseBody = response.body().string();
+            JsonNode root = objectMapper.readTree(responseBody);
+
+            JsonNode results = root.get("results");
+            if (results != null && results.isArray() && results.size() > 0) {
+                JsonNode openfda = results.get(0).get("openfda");
+                if (openfda != null && openfda.has("dea_schedule")) {
+                    JsonNode schedules = openfda.get("dea_schedule");
+                    if (schedules.isArray() && schedules.size() > 0) {
+                        String schedule = schedules.get(0).asText();
+                        // Rimuovi "C" prefix se presente (es. "CII" -> "II")
+                        schedule = schedule.replaceAll("^C", "");
+                        logger.info("Drug is Schedule {}", schedule);
+                        return schedule;
+                    }
+                }
+            }
+
+            return null;
+        }
+    }
 
     private Drug getCachedDrug(String searchTerm) {
         try (Connection conn = dbManager.getConnection();

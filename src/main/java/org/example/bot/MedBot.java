@@ -23,8 +23,8 @@ import java.sql.ResultSet;
 import java.util.List;
 
 /**
- * Bot Telegram semplificato per OpenFDA.
- * Gestisce i comandi principali e interagisce con il database SQLite.
+ * Bot Telegram che interagisce con l'API OpenFDA.
+ * Gestione comandi e database SQLite.
  */
 public class MedBot implements LongPollingSingleThreadUpdateConsumer {
     private static final Logger logger = LoggerFactory.getLogger(MedBot.class);
@@ -32,107 +32,103 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
     private final OpenFdaService fdaService;
     private final DatabaseManager dbManager;
 
-    private static final String DISCLAIMER = "\n\n⚠️ <i>Disclaimer: Queste informazioni sono solo a scopo informativo " +
-            "e non costituiscono consulenza medica. In caso di dubbi o emergenze, " +
-            "contatta un professionista sanitario.</i>";
+    // Disclaimer medico obbligatorio
+    private static final String DISCLAIMER = "\n\n⚠️ <i>Disclaimer: Info a scopo informativo. " +
+            "Non è un parere medico. In caso di dubbi, contatta un medico.</i>";
 
     public MedBot() {
+        // Carico la configurazione
         String botToken = MyConfiguration.getInstance().getProperty("BOT_TOKEN");
         this.telegramClient = new OkHttpTelegramClient(botToken);
         this.fdaService = new OpenFdaService();
         this.dbManager = DatabaseManager.getInstance();
-        logger.info("MedBot initialized");
+        logger.info("MedBot avviato correttamente");
     }
 
     @Override
     public void consume(Update update) {
+        // Controllo se è un messaggio di testo
         if (update.hasMessage() && update.getMessage().hasText()) {
             String messageText = update.getMessage().getText().trim();
             long chatId = update.getMessage().getChatId();
             String username = update.getMessage().getFrom().getUserName();
 
-            // Registra utente nel database
+            // Salviamo l'utente nel db se è nuovo
             registerUser(chatId, username);
 
-            logger.info("Message from {}: {}", chatId, messageText);
+            logger.info("Messaggio da {}: {}", chatId, messageText);
 
-            // Gestisci comandi
+            // Gestione dei comandi
             if (messageText.startsWith("/")) {
                 handleCommand(chatId, messageText, username);
             } else {
-                sendMessage(chatId, "❓ Non ho capito. Usa /help per vedere i comandi disponibili.");
+                sendMessage(chatId, "❓ Non capisco. Usa /help per vedere cosa posso fare.");
             }
         } else if (update.hasCallbackQuery()) {
+            // Gestione dei pulsanti
             handleCallback(update);
         }
     }
 
     private void handleCommand(long chatId, String message, String username) {
+        // Divido il comando dagli argomenti
         String[] parts = message.split("\\s+", 2);
         String command = parts[0].toLowerCase();
         String args = parts.length > 1 ? parts[1].trim() : "";
 
-        logger.debug("Command: {}, Args: {}", command, args);
-
         switch (command) {
             case "/start" -> handleStart(chatId, username);
             case "/help" -> handleHelp(chatId);
-            case "/cerca", "/searchdrug" -> handleSearchDrug(chatId, args);
-            case "/richiami", "/recalls" -> handleRecalls(chatId, args);
+            case "/cerca" -> handleSearchDrug(chatId, args);
+            case "/richiami" -> handleRecalls(chatId, args); // Solo richiami ora
             case "/mystats" -> handleMyStats(chatId);
-            default -> sendMessage(chatId, "❓ Comando sconosciuto. Usa /help per la lista dei comandi.");
+            default -> sendMessage(chatId, "❓ Comando non valido. Prova /help.");
         }
     }
 
     private void handleStart(long chatId, String username) {
         String welcome = String.format(
-                "👋 Benvenuto <b>%s</b> su OpenFDA MedBot!\n\n" +
-                        "🔬 Questo bot utilizza l'<b>API pubblica della FDA</b> (Food and Drug Administration americana) " +
-                        "per fornirti informazioni su farmaci e richiami.\n\n" +
-                        "🇺🇸 <b>Nota importante:</b> I dati provengono da un database americano, quindi " +
-                        "i risultati sono in <b>inglese</b>. Per migliori risultati, cerca i farmaci con il loro " +
-                        "nome inglese (es. 'aspirin' invece di 'aspirina').\n\n" +
-                        "📖 Usa /help per vedere tutti i comandi disponibili.",
-                username != null ? username : "utente"
-        );
+                "👋 Ciao <b>%s</b>! Benvenuto su OpenFDA MedBot.\n\n" +
+                        "Sono qui per aiutarti a trovare informazioni sui farmaci usando i dati ufficiali FDA.\n" +
+                        "Ricorda che i dati sono in <b>inglese</b>, quindi prova a cercare i nomi in inglese (es. 'aspirin').\n\n"
+                        +
+                        "Digita /help per iniziare.",
+                username != null ? username : "utente");
         sendMessage(chatId, welcome + DISCLAIMER);
     }
 
     private void handleHelp(long chatId) {
-        String help = "<b>📋 Lista Comandi</b>\n\n" +
-                "/start - Messaggio di benvenuto\n" +
-                "/help - Mostra questa lista\n\n" +
-                "<b>🔍 Ricerca Farmaci</b>\n" +
-                "/cerca &lt;nome&gt;\n" +
-                "/searchdrug &lt;nome&gt;\n" +
-                "Cerca informazioni su un farmaco specifico.\n" +
-                "Esempio: <code>/cerca aspirin</code>\n\n" +
-                "<b>⚠️ Richiami FDA</b>\n" +
-                "/richiami &lt;nome|all&gt;\n" +
-                "/recalls &lt;nome|all&gt;\n" +
-                "Verifica se ci sono richiami per un farmaco.\n" +
-                "Esempi:\n" +
-                "• <code>/richiami aspirin</code> - richiami per aspirina\n" +
-                "• <code>/richiami all</code> - ultimi 10 richiami\n\n" +
-                "<b>📊 Statistiche Personali</b>\n" +
-                "/mystats - Mostra le tue statistiche d'uso\n\n" +
-                "💡 <b>Suggerimento importante:</b> Usa i nomi dei farmaci in <b>inglese</b> " +
-                "per ottenere risultati migliori!\n" +
-                "Esempi: 'aspirin', 'ibuprofen', 'amoxicillin'";
+        String help = """
+                <b>📋 Comandi Disponibili</b>
+
+                /start - Riavvia il bot
+                /help - Mostra questo messaggio
+
+                <b>🔍 Ricerca</b>
+                /cerca <nome> - Cerca informazioni su un farmaco
+                Esempio: <code>/cerca aspirin</code>
+
+                <b>⚠️ Richiami</b>
+                /richiami <nome> - Controlla richiami per un farmaco
+                Esempio: <code>/richiami ibuprofen</code>
+                Usa <code>/richiami all</code> per vedere gli ultimi 10.
+
+                <b>📊 Statistiche</b>
+                /mystats - Le tue statistiche d'uso
+                """;
 
         sendMessage(chatId, help);
     }
 
     private void handleSearchDrug(long chatId, String drugName) {
         if (drugName.isEmpty()) {
-            sendMessage(chatId, "❌ Devi specificare il nome del farmaco!\n\n" +
-                    "📝 Esempio: <code>/cerca aspirina</code>");
+            sendMessage(chatId, "❌ Inserisci il nome del farmaco.\nEsempio: <code>/cerca paracetamol</code>");
             return;
         }
 
         sendMessage(chatId, "🔍 Cerco \"" + drugName + "\"...");
 
-        // Registra la ricerca
+        // Salviamo la ricerca nel db
         recordSearch(chatId, drugName);
 
         try {
@@ -140,309 +136,221 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
 
             if (drugs.isEmpty()) {
                 sendMessage(chatId,
-                        "❌ <b>Nessun risultato</b> per \"" + escapeHtml(drugName) + "\".\n\n" +
-                                "💡 <b>Suggerimenti:</b>\n" +
-                                "• Controlla l'ortografia\n" +
-                                "• Prova con il nome generico (es. 'ibuprofen')\n" +
-                                "• Usa il principio attivo del farmaco\n" +
-                                "• Prova in inglese (es. 'aspirin' invece di 'aspirina')");
+                        "❌ Nessun farmaco trovato per \"" + escapeHtml(drugName) + "\".\nProva in inglese.");
                 return;
             }
 
-            // Mostra i primi 3 risultati
+            // Prendiamo solo i primi 3 per non intasare la chat
             int count = Math.min(3, drugs.size());
             StringBuilder response = new StringBuilder();
-            response.append(String.format("✅ <b>%d risultati</b> per \"%s\":\n\n",
-                    drugs.size(), escapeHtml(drugName)));
+            response.append(String.format("✅ Trovati <b>%d risultati</b>:\n\n", drugs.size()));
 
             for (int i = 0; i < count; i++) {
-                Drug drug = drugs.get(i);
-                response.append(formatDrugInfo(drug, i + 1));
-                if (i < count - 1) response.append("\n➖➖➖\n\n");
+                response.append(formatDrugInfo(drugs.get(i), i + 1));
+                if (i < count - 1)
+                    response.append("\n➖➖➖\n\n");
             }
 
-            if (drugs.size() > 3) {
-                response.append(String.format("\n\n<i>... e altri %d risultati</i>", drugs.size() - 3));
-            }
-
-            // Aggiungi pulsante per richiami
+            // Aggiungiamo il bottone per i richiami se serve approfondire
             InlineKeyboardMarkup keyboard = createRecallsKeyboard(drugName);
             sendMessageWithKeyboard(chatId, response.toString(), keyboard);
 
         } catch (Exception e) {
-            logger.error("Error searching drug: " + drugName, e);
-
-            String errorMsg = "❌ <b>Errore durante la ricerca</b>\n\n";
-
-            if (e.getMessage().contains("404")) {
-                errorMsg += "Il farmaco \"" + escapeHtml(drugName) + "\" non è stato trovato nel database FDA.\n\n" +
-                        "💡 Prova con un nome diverso o più generico.";
-            } else if (e.getMessage().contains("timeout") || e.getMessage().contains("connect")) {
-                errorMsg += "⚠️ Impossibile contattare il server FDA.\n" +
-                        "Riprova tra qualche minuto.";
-            } else {
-                errorMsg += "Si è verificato un errore tecnico.\n" +
-                        "Dettaglio: " + e.getMessage();
-            }
-
-            sendMessage(chatId, errorMsg);
+            logger.error("Errore ricerca farmaco: " + drugName, e);
+            sendMessage(chatId, "❌ Errore durante la ricerca. Riprova più tardi.");
         }
     }
 
     private void handleRecalls(long chatId, String drugName) {
         if (drugName.isEmpty()) {
-            sendMessage(chatId, "❌ Specifica il nome del farmaco o scrivi 'all'.\n\n" +
-                    "📝 Esempio: <code>/richiami aspirina</code>\n" +
-                    "📝 Oppure: <code>/richiami all</code>");
+            sendMessage(chatId, "❌ Specifica un farmaco o usa 'all'.");
             return;
         }
 
-        sendMessage(chatId, "🔍 Cerco richiami...");
+        sendMessage(chatId, "🔍 Controllo richiami...");
 
         try {
+            // Se chiede "all" mostriamo gli ultimi, altrimenti cerchiamo specifico
             List<Recall> recalls = drugName.equalsIgnoreCase("all")
                     ? fdaService.getRecentRecalls(10)
                     : fdaService.searchRecalls(drugName);
 
             if (recalls.isEmpty()) {
-                sendMessage(chatId,
-                        "✅ <b>Nessun richiamo trovato</b> per \"" + escapeHtml(drugName) + "\".\n\n" +
-                                "🎉 Buone notizie! Non ci sono richiami recenti per questo farmaco.");
+                sendMessage(chatId, "✅ Nessun richiamo trovato per \"" + escapeHtml(drugName) + "\". Ottimo!");
                 return;
             }
 
             StringBuilder response = new StringBuilder();
-            response.append(String.format("⚠️ <b>%d Richiami FDA</b> trovati", recalls.size()));
-            if (!drugName.equalsIgnoreCase("all")) {
-                response.append(" per \"").append(escapeHtml(drugName)).append("\"");
-            }
-            response.append(":\n\n");
+            response.append(String.format("⚠️ Trovati <b>%d richiami FDA</b>:\n\n", recalls.size()));
 
             int count = Math.min(5, recalls.size());
             for (int i = 0; i < count; i++) {
-                Recall recall = recalls.get(i);
-                response.append(formatRecallInfo(recall, i + 1));
-                if (i < count - 1) response.append("\n➖➖➖\n\n");
-            }
-
-            if (recalls.size() > 5) {
-                response.append(String.format("\n\n<i>... e altri %d richiami</i>", recalls.size() - 5));
+                response.append(formatRecallInfo(recalls.get(i), i + 1));
+                if (i < count - 1)
+                    response.append("\n➖➖➖\n\n");
             }
 
             sendMessage(chatId, response.toString());
 
         } catch (Exception e) {
-            logger.error("Error searching recalls: " + drugName, e);
-
-            String errorMsg = "❌ <b>Errore durante la ricerca richiami</b>\n\n";
-
-            if (e.getMessage().contains("404")) {
-                errorMsg += "✅ Nessun richiamo trovato per \"" + escapeHtml(drugName) + "\".\n" +
-                        "Questo è positivo!";
-            } else {
-                errorMsg += "Si è verificato un errore. Riprova più tardi.\n" +
-                        "Dettaglio: " + e.getMessage();
-            }
-
-            sendMessage(chatId, errorMsg);
+            logger.error("Errore richiami: " + drugName, e);
+            sendMessage(chatId, "❌ Errore nel controllo richiami.");
         }
     }
 
     private void handleMyStats(long chatId) {
         try {
-            int searchCount = getSearchCount(chatId);
-
-            String response = String.format("""
-                📊 <b>Le tue statistiche:</b>
-                
-                🔍 Ricerche effettuate: <b>%d</b>
-                👤 ID Telegram: <code>%d</code>
-                
-                💡 Continua a usare il bot per esplorare più farmaci!
-                """, searchCount, chatId);
-
-            sendMessage(chatId, response);
-
+            int count = getSearchCount(chatId);
+            String msg = String.format("📊 <b>Le tue Statistiche</b>\n\nHai effettuato <b>%d</b> ricerche.", count);
+            sendMessage(chatId, msg);
         } catch (Exception e) {
-            logger.error("Error getting stats for user: " + chatId, e);
-            sendMessage(chatId, "❌ Errore nel recuperare le statistiche.");
+            sendMessage(chatId, "❌ Impossibile recuperare le statistiche.");
         }
     }
 
-    // ==================== UTILITY METHODS ====================
+    // ---------------- METODI DI UTILITÀ ----------------
 
     private void registerUser(long chatId, String username) {
+        // Query per inserire utenti o aggiornare l'ultimo accesso
+        String sql = "INSERT INTO users (telegram_id, username, last_active) VALUES (?, ?, CURRENT_TIMESTAMP) " +
+                "ON CONFLICT(telegram_id) DO UPDATE SET username = excluded.username, last_active = CURRENT_TIMESTAMP";
+
         try (Connection conn = dbManager.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(
-                     "INSERT INTO users (telegram_id, username, last_active) VALUES (?, ?, CURRENT_TIMESTAMP) " +
-                             "ON CONFLICT(telegram_id) DO UPDATE SET username = excluded.username, last_active = CURRENT_TIMESTAMP")) {
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setLong(1, chatId);
             pstmt.setString(2, username);
             pstmt.executeUpdate();
 
         } catch (Exception e) {
-            logger.error("Error registering user: " + chatId, e);
+            logger.warn("Errore registrazione utente: " + e.getMessage());
         }
     }
 
     private void recordSearch(long chatId, String query) {
         try (Connection conn = dbManager.getConnection()) {
-            // Inserisci nella tabella searches
-            try (PreparedStatement pstmt = conn.prepareStatement(
-                    "INSERT INTO searches (telegram_id, query_text) VALUES (?, ?)")) {
+            // Salvo la query
+            try (PreparedStatement pstmt = conn
+                    .prepareStatement("INSERT INTO searches (telegram_id, query_text) VALUES (?, ?)")) {
                 pstmt.setLong(1, chatId);
                 pstmt.setString(2, query);
                 pstmt.executeUpdate();
             }
 
-            // Incrementa il contatore nell'utente
-            try (PreparedStatement pstmt = conn.prepareStatement(
-                    "UPDATE users SET search_count = search_count + 1, last_active = CURRENT_TIMESTAMP WHERE telegram_id = ?")) {
+            // Aggiorno il contatore utente
+            try (PreparedStatement pstmt = conn
+                    .prepareStatement("UPDATE users SET search_count = search_count + 1 WHERE telegram_id = ?")) {
                 pstmt.setLong(1, chatId);
                 pstmt.executeUpdate();
             }
 
-            logger.debug("Search recorded for user {}: {}", chatId, query);
-
         } catch (Exception e) {
-            logger.error("Error recording search", e);
+            logger.warn("Errore salvataggio ricerca: " + e.getMessage());
         }
     }
 
     private int getSearchCount(long chatId) {
         try (Connection conn = dbManager.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(
-                     "SELECT search_count FROM users WHERE telegram_id = ?")) {
+                PreparedStatement pstmt = conn
+                        .prepareStatement("SELECT search_count FROM users WHERE telegram_id = ?")) {
 
             pstmt.setLong(1, chatId);
             ResultSet rs = pstmt.executeQuery();
-
-            if (rs.next()) {
+            if (rs.next())
                 return rs.getInt("search_count");
-            }
 
         } catch (Exception e) {
-            logger.error("Error getting search count", e);
+            logger.error("Errore lettura statistiche", e);
         }
-
         return 0;
     }
 
     private String formatDrugInfo(Drug drug, int index) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(String.format("<b>%d. %s</b>\n", index, escapeHtml(drug.getBrandName())));
+        // Formattazione semplice del risultato
+        String info = String.format("<b>%d. %s</b>\n", index, escapeHtml(drug.getBrandName()));
 
-        if (drug.getGenericName() != null && !drug.getGenericName().isEmpty()) {
-            sb.append(String.format("   📋 <i>Principio attivo:</i> %s\n",
-                    escapeHtml(drug.getGenericName())));
-        }
+        if (drug.getGenericName() != null)
+            info += "   📋 <i>Principio:</i> " + escapeHtml(drug.getGenericName()) + "\n";
 
-        if (drug.getManufacturer() != null && !drug.getManufacturer().isEmpty()) {
-            sb.append(String.format("   🏭 <i>Produttore:</i> %s\n",
-                    escapeHtml(drug.getManufacturer())));
-        }
+        if (drug.getManufacturer() != null)
+            info += "   🏭 <i>Produttore:</i> " + escapeHtml(drug.getManufacturer()) + "\n";
 
-        if (drug.getIndications() != null && !drug.getIndications().isEmpty()) {
-            String indications = truncate(drug.getIndications(), 200);
-            sb.append(String.format("   💊 <i>Indicazioni:</i> %s\n",
-                    escapeHtml(indications)));
-        }
+        if (drug.getIndications() != null)
+            info += "   💊 <i>Uso:</i> " + escapeHtml(truncate(drug.getIndications(), 150)) + "\n";
 
-        return sb.toString();
+        return info;
     }
 
     private String formatRecallInfo(Recall recall, int index) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(String.format("<b>%d. Richiamo del %s</b>\n", index,
-                recall.getRecallDate() != null ? recall.getRecallDate() : "data sconosciuta"));
+        String info = String.format("<b>%d. Data: %s</b>\n", index,
+                recall.getRecallDate() != null ? recall.getRecallDate() : "N/D");
 
-        if (recall.getProductDescription() != null) {
-            sb.append(String.format("   📦 <i>Prodotto:</i> %s\n",
-                    escapeHtml(truncate(recall.getProductDescription(), 100))));
-        }
+        if (recall.getProductDescription() != null)
+            info += "   📦 " + escapeHtml(truncate(recall.getProductDescription(), 80)) + "\n";
 
-        if (recall.getReasonForRecall() != null) {
-            sb.append(String.format("   ⚠️ <i>Motivo:</i> %s\n",
-                    escapeHtml(truncate(recall.getReasonForRecall(), 150))));
-        }
+        if (recall.getReasonForRecall() != null)
+            info += "   ⚠️ " + escapeHtml(truncate(recall.getReasonForRecall(), 100)) + "\n";
 
-        if (recall.getClassification() != null) {
-            sb.append(String.format("   🏷️ <i>Classificazione:</i> Class %s\n", recall.getClassification()));
-        }
-
-        return sb.toString();
+        return info;
     }
 
     private InlineKeyboardMarkup createRecallsKeyboard(String drugName) {
-        InlineKeyboardButton button = InlineKeyboardButton.builder()
-                .text("🔍 Controlla richiami per questo farmaco")
+        InlineKeyboardButton btn = InlineKeyboardButton.builder()
+                .text("🔍 Verifica Richiami")
                 .callbackData("recalls:" + drugName)
                 .build();
 
-        InlineKeyboardRow row = new InlineKeyboardRow(button);
-        return InlineKeyboardMarkup.builder()
-                .keyboardRow(row)
-                .build();
+        return InlineKeyboardMarkup.builder().keyboardRow(new InlineKeyboardRow(btn)).build();
     }
 
     private void handleCallback(Update update) {
-        String callbackData = update.getCallbackQuery().getData();
+        String data = update.getCallbackQuery().getData();
         long chatId = update.getCallbackQuery().getMessage().getChatId();
 
-        logger.debug("Callback: {}", callbackData);
-
-        if (callbackData.startsWith("recalls:")) {
-            String drugName = callbackData.substring(8);
-            handleRecalls(chatId, drugName);
+        if (data.startsWith("recalls:")) {
+            handleRecalls(chatId, data.substring(8));
         }
     }
 
     private void sendMessage(long chatId, String text) {
-        SendMessage message = SendMessage.builder()
+        SendMessage msg = SendMessage.builder()
                 .chatId(chatId)
                 .text(text)
                 .parseMode("HTML")
                 .disableWebPagePreview(true)
                 .build();
-
         try {
-            telegramClient.execute(message);
+            telegramClient.execute(msg);
         } catch (TelegramApiException e) {
-            logger.error("Error sending message to " + chatId, e);
+            logger.error("Impossibile inviare messaggio a " + chatId, e);
         }
     }
 
-    private void sendMessageWithKeyboard(long chatId, String text, InlineKeyboardMarkup keyboard) {
-        SendMessage message = SendMessage.builder()
+    private void sendMessageWithKeyboard(long chatId, String text, InlineKeyboardMarkup kb) {
+        SendMessage msg = SendMessage.builder()
                 .chatId(chatId)
                 .text(text)
                 .parseMode("HTML")
-                .disableWebPagePreview(true)
-                .replyMarkup(keyboard)
+                .replyMarkup(kb)
                 .build();
-
         try {
-            telegramClient.execute(message);
+            telegramClient.execute(msg);
         } catch (TelegramApiException e) {
-            logger.error("Error sending message with keyboard to " + chatId, e);
+            logger.error("Errore invio keyboard", e);
         }
     }
 
-    // Utility per escape HTML
     private String escapeHtml(String text) {
-        if (text == null || text.isEmpty()) return "";
+        if (text == null)
+            return "";
         return text.replace("&", "&amp;")
                 .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-                .replace("'", "&#39;");
+                .replace(">", "&gt;");
     }
 
-    // Utility per troncare testo
-    private String truncate(String text, int maxLength) {
-        if (text == null || text.isEmpty()) return "";
-        if (text.length() <= maxLength) return text;
-        return text.substring(0, maxLength - 3) + "...";
+    private String truncate(String text, int max) {
+        if (text == null || text.length() <= max)
+            return text;
+        return text.substring(0, max - 3) + "...";
     }
 }

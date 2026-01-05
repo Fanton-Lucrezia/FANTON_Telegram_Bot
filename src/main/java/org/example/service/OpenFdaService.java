@@ -63,8 +63,7 @@ public class OpenFdaService {
         String encodedTerm = URLEncoder.encode(searchTerm, StandardCharsets.UTF_8);
         String query = String.format(
                 "(openfda.brand_name:\"%s\"+OR+openfda.generic_name:\"%s\")",
-                encodedTerm, encodedTerm
-        );
+                encodedTerm, encodedTerm);
 
         String url = String.format("%s/drug/label.json?search=%s&limit=10", FDA_BASE_URL, query);
 
@@ -108,8 +107,7 @@ public class OpenFdaService {
         String encodedTerm = URLEncoder.encode(searchTerm, StandardCharsets.UTF_8);
         String url = String.format(
                 "%s/drug/enforcement.json?search=product_description:\"%s\"&limit=20",
-                FDA_BASE_URL, encodedTerm
-        );
+                FDA_BASE_URL, encodedTerm);
 
         logger.debug("FDA Recalls URL: {}", url);
 
@@ -144,8 +142,7 @@ public class OpenFdaService {
 
         String url = String.format(
                 "%s/drug/enforcement.json?limit=%d&sort=report_date:desc",
-                FDA_BASE_URL, limit
-        );
+                FDA_BASE_URL, limit);
 
         Request request = new Request.Builder()
                 .url(url)
@@ -174,8 +171,7 @@ public class OpenFdaService {
         String encodedTerm = URLEncoder.encode(drugName, StandardCharsets.UTF_8);
         String url = String.format(
                 "%s/drug/event.json?search=patient.drug.medicinalproduct:\"%s\"&limit=100",
-                FDA_BASE_URL, encodedTerm
-        );
+                FDA_BASE_URL, encodedTerm);
 
         logger.debug("URL FDA Events: {}", url);
 
@@ -209,8 +205,7 @@ public class OpenFdaService {
         String encodedTopic = URLEncoder.encode(topic, StandardCharsets.UTF_8);
         String url = String.format(
                 "https://health.gov/myhealthfinder/api/v3/topicsearch.json?keyword=%s",
-                encodedTopic
-        );
+                encodedTopic);
 
         logger.debug("URL MyHealthfinder: {}", url);
 
@@ -423,35 +418,65 @@ public class OpenFdaService {
                     java.util.Map<String, String> sectionData = new java.util.HashMap<>();
 
                     if (section.has("Title")) {
-                        sectionData.put("title", section.get("Title").asText());
+                        String title = section.get("Title").asText();
+                        // Salta titoli vuoti o "null"
+                        if (title == null || title.equalsIgnoreCase("null") || title.trim().isEmpty()) {
+                            continue;
+                        }
+                        sectionData.put("title", title);
                     }
 
                     if (section.has("Content")) {
-                        // Pulisci HTML tags
                         String content = section.get("Content").asText();
-                        content = content.replaceAll("<[^>]+>", " ")
-                                .replaceAll("\\s+", " ")
-                                .trim();
-                        // Limita a 300 caratteri per sezione
-                        if (content.length() > 300) {
-                            content = content.substring(0, 297) + "...";
+
+                        // Salta contenuti nulli o vuoti
+                        if (content == null || content.equalsIgnoreCase("null") || content.trim().isEmpty()) {
+                            continue;
                         }
+
+                        // Pulisci HTML tags e entità
+                        content = content
+                                .replaceAll("<[^>]+>", " ") // Rimuovi tag HTML
+                                .replaceAll("&nbsp;", " ") // Sostituisci &nbsp;
+                                .replaceAll("&amp;", "&") // Sostituisci &amp;
+                                .replaceAll("&lt;", "<")
+                                .replaceAll("&gt;", ">")
+                                .replaceAll("&quot;", "\"")
+                                .replaceAll("&#39;", "'")
+                                .replaceAll("\\s+", " ") // Normalizza spazi
+                                .trim();
+
+                        // Salta se il contenuto pulito è troppo corto
+                        if (content.length() < 20) {
+                            continue;
+                        }
+
+                        // Limita a 350 caratteri per sezione
+                        if (content.length() > 350) {
+                            content = content.substring(0, 347) + "...";
+                        }
+
                         sectionData.put("content", content);
                     }
 
-                    if (!sectionData.isEmpty()) {
+                    // Aggiungi solo se ha sia titolo che contenuto validi
+                    if (sectionData.containsKey("title") && sectionData.containsKey("content")) {
                         sections.add(sectionData);
                     }
 
-                    // Limita a 3 sezioni
-                    if (sections.size() >= 3) break;
+                    // Limita a 4 sezioni
+                    if (sections.size() >= 4)
+                        break;
                 }
             }
         }
 
-        if (!sections.isEmpty()) {
-            result.put("sections", sections);
+        // Se non ci sono sezioni valide, ritorna null
+        if (sections.isEmpty()) {
+            return null;
         }
+
+        result.put("sections", sections);
 
         return result;
     }
@@ -468,8 +493,7 @@ public class OpenFdaService {
         // Cerca prima nel database label per ottenere info sulla sostanza
         String url = String.format(
                 "%s/drug/label.json?search=(openfda.brand_name:\"%s\"+OR+openfda.generic_name:\"%s\")+AND+_exists_:openfda.dea_schedule&limit=1",
-                FDA_BASE_URL, encodedTerm, encodedTerm
-        );
+                FDA_BASE_URL, encodedTerm, encodedTerm);
 
         logger.debug("FDA Schedule URL: {}", url);
 
@@ -508,11 +532,11 @@ public class OpenFdaService {
 
     private Drug getCachedDrug(String searchTerm) {
         try (Connection conn = dbManager.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(
-                     "SELECT * FROM drugs_cache " +
-                             "WHERE (LOWER(brand_name) LIKE LOWER(?) OR LOWER(generic_name) LIKE LOWER(?)) " +
-                             "AND last_fetched > datetime('now', '-' || ? || ' hours') " +
-                             "ORDER BY last_fetched DESC LIMIT 1")) {
+                PreparedStatement pstmt = conn.prepareStatement(
+                        "SELECT * FROM drugs_cache " +
+                                "WHERE (LOWER(brand_name) LIKE LOWER(?) OR LOWER(generic_name) LIKE LOWER(?)) " +
+                                "AND last_fetched > datetime('now', '-' || ? || ' hours') " +
+                                "ORDER BY last_fetched DESC LIMIT 1")) {
 
             String pattern = "%" + searchTerm + "%";
             pstmt.setString(1, pattern);
@@ -540,9 +564,10 @@ public class OpenFdaService {
 
     private void saveDrugToCache(Drug drug) {
         try (Connection conn = dbManager.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(
-                     "INSERT OR REPLACE INTO drugs_cache (drug_id, brand_name, generic_name, manufacturer, indications, last_fetched) " +
-                             "VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)")) {
+                PreparedStatement pstmt = conn.prepareStatement(
+                        "INSERT OR REPLACE INTO drugs_cache (drug_id, brand_name, generic_name, manufacturer, indications, last_fetched) "
+                                +
+                                "VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)")) {
 
             String drugId = generateDrugId(drug);
             drug.setDrugId(drugId);
@@ -563,7 +588,8 @@ public class OpenFdaService {
 
     private String generateDrugId(Drug drug) {
         String name = drug.getBrandName() != null ? drug.getBrandName() : drug.getGenericName();
-        if (name == null) name = "unknown";
+        if (name == null)
+            name = "unknown";
 
         String normalized = name.toLowerCase().replaceAll("[^a-z0-9]", "-");
         return normalized + "-" + System.currentTimeMillis();

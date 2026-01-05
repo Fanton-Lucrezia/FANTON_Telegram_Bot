@@ -81,7 +81,9 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
             case "/richiami" -> handleRecalls(chatId, args);
             case "/mystats" -> handleMyStats(chatId);
             case "/recenti" -> handleRecentSearches(chatId);
-            case "/schedadroga" -> handleDrugSchedule(chatId, args);
+            case "/farmacolegale" -> handleControlledSubstance(chatId, args);
+            case "/effetticollaterali" -> handleAdverseEvents(chatId, args);
+            case "/informazioni" -> handleHealthTopic(chatId, args);
             default -> sendMessage(chatId, "❓ Comando sconosciuto. Usa /help per la lista dei comandi.");
         }
     }
@@ -106,24 +108,35 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
                 "/help - Mostra questa lista\n\n" +
                 "<b>🔍 Ricerca Farmaci</b>\n" +
                 "/cerca &lt;nome&gt;\n" +
-                "Cerca informazioni su un farmaco specifico.\n" +
+                "Cerca informazioni dettagliate su un farmaco.\n" +
                 "Esempio: <code>/cerca aspirin</code>\n\n" +
-                "<b>⚠️ Richiami FDA</b>\n" +
+                "<b>⚠️ Sicurezza e Legalità</b>\n" +
                 "/richiami &lt;nome|all&gt;\n" +
-                "Verifica se ci sono richiami per un farmaco.\n" +
+                "Verifica richiami FDA per un farmaco.\n" +
                 "Esempi:\n" +
-                "• <code>/richiami aspirin</code> - richiami per aspirina\n" +
-                "• <code>/richiami all</code> - ultimi 10 richiami\n\n" +
+                "• <code>/richiami aspirin</code>\n" +
+                "• <code>/richiami all</code> - ultimi richiami\n\n" +
+                "/farmacolegale &lt;nome&gt;\n" +
+                "Verifica se un farmaco è una sostanza controllata " +
+                "(richiede prescrizione speciale per rischio dipendenza).\n" +
+                "Esempio: <code>/farmacolegale oxycodone</code>\n\n" +
+                "/effetticollaterali &lt;nome&gt;\n" +
+                "Mostra effetti collaterali segnalati dagli utenti.\n" +
+                "Esempio: <code>/effetticollaterali aspirin</code>\n\n" +
+                "<b>💡 Informazioni Salute</b>\n" +
+                "/informazioni &lt;argomento&gt;\n" +
+                "Consigli su prevenzione e salute in generale.\n" +
+                "Esempi:\n" +
+                "• <code>/informazioni diabetes</code> (diabete)\n" +
+                "• <code>/informazioni flu</code> (influenza)\n" +
+                "• <code>/informazioni heart</code> (cuore)\n" +
+                "• <code>/informazioni nutrition</code> (nutrizione)\n\n" +
                 "<b>📊 Le Tue Informazioni</b>\n" +
                 "/mystats - Statistiche personali\n" +
                 "/recenti - Farmaci cercati di recente\n\n" +
-                "<b>🚨 Sostanze Controllate</b>\n" +
-                "/schedadroga &lt;nome&gt;\n" +
-                "Verifica se un farmaco è una sostanza controllata (droga).\n" +
-                "Esempio: <code>/schedadroga oxycodone</code>\n\n" +
-                "💡 <b>Suggerimento:</b> Usa i nomi dei farmaci in <b>inglese</b> " +
-                "per ottenere risultati migliori!\n" +
-                "Esempi: 'aspirin', 'ibuprofen', 'amoxicillin'";
+                "💡 <b>Suggerimento:</b> Usa nomi in <b>inglese</b> " +
+                "per risultati migliori!\n" +
+                "Esempi: 'aspirin', 'ibuprofen', 'diabetes', 'flu'";
 
         sendMessage(chatId, help);
     }
@@ -195,6 +208,10 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
     }
 
     private void handleRecalls(long chatId, String drugName) {
+        handleRecalls(chatId, drugName, 0);
+    }
+
+    private void handleRecalls(long chatId, String drugName, int offset) {
         if (drugName.isEmpty()) {
             sendMessage(chatId, "❌ Specifica il nome del farmaco o scrivi 'all'.\n\n" +
                     "📝 Esempio: <code>/richiami aspirina</code>\n" +
@@ -202,11 +219,13 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
             return;
         }
 
-        sendMessage(chatId, "🔍 Cerco richiami...");
+        if (offset == 0) {
+            sendMessage(chatId, "🔍 Cerco richiami...");
+        }
 
         try {
             List<Recall> recalls = drugName.equalsIgnoreCase("all")
-                    ? fdaService.getRecentRecalls(10)
+                    ? fdaService.getRecentRecalls(50)
                     : fdaService.searchRecalls(drugName);
 
             if (recalls.isEmpty()) {
@@ -216,28 +235,56 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
                 return;
             }
 
-            StringBuilder response = new StringBuilder();
-            response.append(String.format("⚠️ <b>%d Richiami FDA</b> trovati", recalls.size()));
-            if (!drugName.equalsIgnoreCase("all")) {
-                response.append(" per \"").append(escapeHtml(drugName)).append("\"");
-            }
-            response.append(":\n\n");
+            // Mostra richiami con paginazione
+            int pageSize = 5;
+            int start = offset;
+            int end = Math.min(start + pageSize, recalls.size());
 
-            int count = Math.min(5, recalls.size());
-            for (int i = 0; i < count; i++) {
+            StringBuilder response = new StringBuilder();
+
+            if (offset == 0) {
+                response.append(String.format("⚠️ <b>%d Richiami FDA</b> trovati", recalls.size()));
+                if (!drugName.equalsIgnoreCase("all")) {
+                    response.append(" per \"").append(escapeHtml(drugName)).append("\"");
+                }
+                response.append(":\n\n");
+
+                // Spiegazione classificazione solo la prima volta
+                response.append("<i>ℹ️ Classificazione FDA:</i>\n");
+                response.append("• <b>Class I</b>: Rischio grave per salute/morte\n");
+                response.append("• <b>Class II</b>: Rischio temporaneo per salute\n");
+                response.append("• <b>Class III</b>: Improbabile danno alla salute\n\n");
+            } else {
+                response.append(String.format("⚠️ <b>Richiami %d-%d di %d:</b>\n\n",
+                        start + 1, end, recalls.size()));
+            }
+
+            for (int i = start; i < end; i++) {
                 Recall recall = recalls.get(i);
                 response.append(formatRecallInfo(recall, i + 1));
-                if (i < count - 1) response.append("\n➖➖➖\n\n");
+                if (i < end - 1) response.append("\n➖➖➖\n\n");
             }
 
-            if (recalls.size() > 5) {
-                response.append(String.format("\n\n<i>... e altri %d richiami</i>", recalls.size() - 5));
-            }
+            // Bottone per mostrare altri richiami
+            if (end < recalls.size()) {
+                int remaining = recalls.size() - end;
+                InlineKeyboardButton button = InlineKeyboardButton.builder()
+                        .text(String.format("📋 Mostra altri %d richiami", remaining))
+                        .callbackData("morerecalls:" + drugName + ":" + end)
+                        .build();
 
-            sendMessage(chatId, response.toString());
+                InlineKeyboardRow row = new InlineKeyboardRow(button);
+                InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
+                        .keyboardRow(row)
+                        .build();
+
+                sendMessageWithKeyboard(chatId, response.toString(), keyboard);
+            } else {
+                sendMessage(chatId, response.toString());
+            }
 
         } catch (Exception e) {
-            logger.error("Error searching recalls: " + drugName, e);
+            logger.error("Errore ricerca richiami: " + drugName, e);
 
             String errorMsg = "❌ <b>Errore durante la ricerca richiami</b>\n\n";
 
@@ -335,10 +382,14 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
         }
     }
 
-    private void handleDrugSchedule(long chatId, String drugName) {
+    private void handleControlledSubstance(long chatId, String drugName) {
         if (drugName.isEmpty()) {
             sendMessage(chatId, "❌ Devi specificare il nome del farmaco!\n\n" +
-                    "📝 Esempio: <code>/schedadroga oxycodone</code>");
+                    "📝 Esempio: <code>/farmacolegale oxycodone</code>\n\n" +
+                    "💡 <b>Cosa fa questo comando:</b>\n" +
+                    "Verifica se un farmaco è classificato come <b>sostanza controllata</b> " +
+                    "(farmaci con rischio di abuso/dipendenza che richiedono prescrizioni speciali).\n\n" +
+                    "<i>Nota: Cerca solo farmaci prescritti legalmente, non droghe illegali.</i>");
             return;
         }
 
@@ -349,8 +400,13 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
 
             if (schedule == null) {
                 sendMessage(chatId,
-                        "✅ <b>\"" + escapeHtml(drugName) + "\" non è classificato come sostanza controllata</b>\n\n" +
-                                "Questo farmaco non risulta essere una droga secondo la classificazione DEA (Drug Enforcement Administration).");
+                        "✅ <b>\"" + escapeHtml(drugName) + "\" NON è una sostanza controllata</b>\n\n" +
+                                "Questo farmaco non risulta classificato come sostanza controllata secondo la " +
+                                "DEA (Drug Enforcement Administration).\n\n" +
+                                "💡 <b>Cosa significa:</b>\n" +
+                                "• Può essere prescritto normalmente\n" +
+                                "• Non richiede prescrizioni speciali\n" +
+                                "• Basso rischio di abuso/dipendenza");
             } else {
                 String emoji = getScheduleEmoji(schedule);
                 String description = getScheduleDescription(schedule);
@@ -359,15 +415,37 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
                         "🚨 <b>SOSTANZA CONTROLLATA</b>\n\n" +
                                 "Farmaco: <b>%s</b>\n" +
                                 "Classificazione DEA: %s <b>Schedule %s</b>\n\n" +
+                                "📋 <b>Descrizione:</b>\n" +
                                 "<i>%s</i>\n\n" +
-                                "⚠️ Questo farmaco è soggetto a controlli rigorosi per rischio di abuso o dipendenza.",
+                                "⚠️ <b>Cosa comporta:</b>\n" +
+                                "• Prescrizione medica speciale obbligatoria\n" +
+                                "• Controlli rigorosi su produzione e distribuzione\n" +
+                                "• Limiti sulla quantità prescrivibile\n" +
+                                "• Tracciamento governativo della distribuzione\n" +
+                                "• Rischio di dipendenza fisica o psicologica",
                         escapeHtml(drugName), emoji, schedule, description
                 ));
             }
 
         } catch (Exception e) {
-            logger.error("Error checking drug schedule: " + drugName, e);
-            sendMessage(chatId, "❌ Errore durante la verifica. Riprova più tardi.");
+            logger.error("Errore verifica sostanza controllata: " + drugName, e);
+
+            if (e.getMessage().contains("404")) {
+                sendMessage(chatId,
+                        "❌ <b>Farmaco non trovato nel database FDA</b>\n\n" +
+                                "\"" + escapeHtml(drugName) + "\" non è presente nel database.\n\n" +
+                                "💡 <b>Possibili motivi:</b>\n" +
+                                "• Non è un farmaco approvato dalla FDA\n" +
+                                "• È una droga illegale (non un farmaco prescrivibile)\n" +
+                                "• Nome scritto in modo errato\n\n" +
+                                "📝 <b>Esempi di farmaci controllati che funzionano:</b>\n" +
+                                "• oxycodone (antidolorifico oppioide)\n" +
+                                "• alprazolam o xanax (ansiolitico)\n" +
+                                "• tramadol (antidolorifico)\n" +
+                                "• codeine (antitussivo oppioide)");
+            } else {
+                sendMessage(chatId, "❌ Errore durante la verifica. Riprova più tardi.");
+            }
         }
     }
 
@@ -390,6 +468,148 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
             case "V" -> "Basso potenziale di abuso relativo a Schedule IV";
             default -> "Informazioni non disponibili";
         };
+    }
+
+    private void handleAdverseEvents(long chatId, String drugName) {
+        if (drugName.isEmpty()) {
+            sendMessage(chatId, "❌ Devi specificare il nome del farmaco!\n\n" +
+                    "📝 Esempio: <code>/effetticollaterali aspirin</code>\n\n" +
+                    "💡 <b>Cosa fa questo comando:</b>\n" +
+                    "Mostra gli effetti collaterali più comuni segnalati dagli utenti " +
+                    "nel database FDA (segnalazioni spontanee di eventi avversi).");
+            return;
+        }
+
+        sendMessage(chatId, "🔍 Cerco effetti collaterali per \"" + drugName + "\"...");
+
+        try {
+            var events = fdaService.getAdverseEvents(drugName);
+
+            if (events.isEmpty()) {
+                sendMessage(chatId,
+                        "✅ <b>Nessun effetto collaterale recente registrato</b> per \"" + escapeHtml(drugName) + "\".\n\n" +
+                                "💡 <b>Nota:</b> Questo non significa che il farmaco non abbia effetti collaterali, " +
+                                "ma che non ci sono segnalazioni recenti nel database FDA delle reazioni avverse.");
+                return;
+            }
+
+            StringBuilder response = new StringBuilder();
+            response.append(String.format("⚠️ <b>Effetti Collaterali Segnalati per \"%s\"</b>\n\n", escapeHtml(drugName)));
+            response.append(String.format("📊 Segnalazioni analizzate: <b>%d</b>\n\n", events.get("total")));
+
+            // Reazioni più comuni
+            @SuppressWarnings("unchecked")
+            var reactions = (java.util.Map<String, Integer>) events.get("topReactions");
+            if (reactions != null && !reactions.isEmpty()) {
+                response.append("<b>🔴 Effetti collaterali più segnalati:</b>\n");
+                int count = 0;
+                for (var entry : reactions.entrySet()) {
+                    if (count >= 10) break;
+                    response.append(String.format("• %s (%d segnalazioni)\n",
+                            escapeHtml(entry.getKey()), entry.getValue()));
+                    count++;
+                }
+                response.append("\n");
+            }
+
+            // Gravità
+            @SuppressWarnings("unchecked")
+            var severity = (java.util.Map<String, Integer>) events.get("serious");
+            if (severity != null) {
+                response.append("<b>⚠️ Gravità delle segnalazioni:</b>\n");
+                int total = ((Number) events.get("total")).intValue();
+
+                response.append(String.format("• Gravi: %d (%.1f%%)\n",
+                        severity.getOrDefault("serious", 0),
+                        total > 0
+                                ? severity.getOrDefault("serious", 0) * 100.0 / total
+                                : 0.0));
+
+                response.append(String.format("• Non gravi: %d (%.1f%%)\n\n",
+                        severity.getOrDefault("nonSerious", 0),
+                        total > 0
+                                ? severity.getOrDefault("nonSerious", 0) * 100.0 / total
+                                : 0.0));
+            }
+
+            response.append("ℹ️ <i>Questi dati provengono da segnalazioni spontanee e non indicano " +
+                    "necessariamente un rapporto causa-effetto diretto. " +
+                    "Consulta sempre un medico per informazioni specifiche sul tuo caso.</i>");
+
+            sendMessage(chatId, response.toString());
+
+        } catch (Exception e) {
+            logger.error("Errore ricerca effetti collaterali: " + drugName, e);
+
+            if (e.getMessage().contains("404")) {
+                sendMessage(chatId, "❌ Nessun effetto collaterale trovato per \"" + escapeHtml(drugName) + "\".");
+            } else {
+                sendMessage(chatId, "❌ Errore durante la ricerca. Riprova più tardi.");
+            }
+        }
+    }
+
+    private void handleHealthTopic(long chatId, String topic) {
+        if (topic.isEmpty()) {
+            sendMessage(chatId, "❌ Specifica un argomento di salute!\n\n" +
+                    "💡 <b>Cosa fa questo comando:</b>\n" +
+                    "Fornisce informazioni generali su salute, prevenzione e benessere.\n\n" +
+                    "📝 <b>Esempi di argomenti:</b>\n" +
+                    "• <code>/informazioni diabetes</code> (diabete)\n" +
+                    "• <code>/informazioni heart</code> (cuore/cardio)\n" +
+                    "• <code>/informazioni flu</code> (influenza)\n" +
+                    "• <code>/informazioni nutrition</code> (nutrizione)\n" +
+                    "• <code>/informazioni exercise</code> (esercizio fisico)\n" +
+                    "• <code>/informazioni smoking</code> (fumo)\n" +
+                    "• <code>/informazioni sleep</code> (sonno)");
+            return;
+        }
+
+        sendMessage(chatId, "🔍 Cerco informazioni su \"" + topic + "\"...");
+
+        try {
+            var healthInfo = fdaService.getHealthInfo(topic);
+
+            if (healthInfo == null || healthInfo.isEmpty()) {
+                sendMessage(chatId,
+                        "❌ <b>Nessuna informazione trovata</b> per \"" + escapeHtml(topic) + "\".\n\n" +
+                                "💡 <b>Suggerimenti:</b>\n" +
+                                "• Usa termini più generici in inglese\n" +
+                                "• Prova: diabetes, heart, cancer, flu, nutrition, exercise, smoking, sleep\n" +
+                                "• Evita termini troppo specifici o tecnici");
+                return;
+            }
+
+            StringBuilder response = new StringBuilder();
+            response.append(String.format("💡 <b>Informazioni su: %s</b>\n\n", escapeHtml((String)healthInfo.get("title"))));
+
+            if (healthInfo.containsKey("sections")) {
+                @SuppressWarnings("unchecked")
+                var sections = (java.util.List<java.util.Map<String, String>>) healthInfo.get("sections");
+
+                for (var section : sections) {
+                    String title = section.get("title");
+                    String content = section.get("content");
+
+                    if (title != null && content != null) {
+                        response.append(String.format("<b>%s</b>\n%s\n\n",
+                                escapeHtml(title), escapeHtml(content)));
+                    }
+                }
+            }
+
+            if (healthInfo.containsKey("url")) {
+                response.append(String.format("\n🔗 <a href=\"%s\">Leggi l'articolo completo</a>", healthInfo.get("url")));
+            }
+
+            response.append("\n\n<i>ℹ️ Fonte: MyHealthfinder (National Library of Medicine - Governo USA)</i>");
+
+            sendMessage(chatId, response.toString());
+
+        } catch (Exception e) {
+            logger.error("Errore ricerca informazioni salute: " + topic, e);
+            sendMessage(chatId, "❌ Errore durante la ricerca. Riprova più tardi.");
+        }
     }
 
     // ==================== UTILITY METHODS ====================
@@ -467,12 +687,36 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
         }
 
         if (drug.getIndications() != null && !drug.getIndications().isEmpty()) {
-            String indications = truncate(drug.getIndications(), 200);
-            sb.append(String.format("   💊 <i>Indicazioni:</i> %s\n",
-                    escapeHtml(indications)));
+            String indications = formatIndications(drug.getIndications());
+            sb.append("   💊 <i>Indicazioni:</i>\n");
+            sb.append(indications);
         }
 
         return sb.toString();
+    }
+
+    private String formatIndications(String rawIndications) {
+        // Pulisci il testo
+        String text = rawIndications.replaceAll("\\s+", " ").trim();
+
+        // Dividi in frasi (punto, punto esclamativo, punto interrogativo)
+        String[] sentences = text.split("(?<=[.!?])\\s+");
+
+        StringBuilder formatted = new StringBuilder();
+        int charCount = 0;
+        int maxChars = 300; // Limite caratteri totali
+
+        for (String sentence : sentences) {
+            if (charCount + sentence.length() > maxChars) {
+                formatted.append("   ...\n");
+                break;
+            }
+
+            formatted.append("   • ").append(escapeHtml(sentence.trim())).append("\n");
+            charCount += sentence.length();
+        }
+
+        return formatted.toString();
     }
 
     private String formatRecallInfo(Recall recall, int index) {
@@ -481,20 +725,33 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
                 recall.getRecallDate() != null ? recall.getRecallDate() : "data sconosciuta"));
 
         if (recall.getProductDescription() != null) {
-            sb.append(String.format("   📦 <i>Prodotto:</i> %s\n",
-                    escapeHtml(truncate(recall.getProductDescription(), 100))));
+            // Non troncare, mostra tutto
+            sb.append(String.format("   📦 <i>Prodotto:</i>\n   %s\n\n",
+                    escapeHtml(recall.getProductDescription())));
         }
 
         if (recall.getReasonForRecall() != null) {
-            sb.append(String.format("   ⚠️ <i>Motivo:</i> %s\n",
-                    escapeHtml(truncate(recall.getReasonForRecall(), 150))));
+            // Non troncare, mostra tutto
+            sb.append(String.format("   ⚠️ <i>Motivo:</i>\n   %s\n\n",
+                    escapeHtml(recall.getReasonForRecall())));
         }
 
         if (recall.getClassification() != null) {
-            sb.append(String.format("   🏷️ <i>Classificazione:</i> Class %s\n", recall.getClassification()));
+            String classEmoji = getClassificationEmoji(recall.getClassification());
+            sb.append(String.format("   %s <i>Classificazione:</i> <b>Class %s</b>\n",
+                    classEmoji, recall.getClassification()));
         }
 
         return sb.toString();
+    }
+
+    private String getClassificationEmoji(String classification) {
+        return switch (classification.toUpperCase()) {
+            case "I", "CLASS I" -> "🔴";
+            case "II", "CLASS II" -> "🟠";
+            case "III", "CLASS III" -> "🟡";
+            default -> "⚪";
+        };
     }
 
     private InlineKeyboardMarkup createRecallsKeyboard(String drugName) {
@@ -514,23 +771,42 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
         long chatId = update.getCallbackQuery().getMessage().getChatId();
         int messageId = update.getCallbackQuery().getMessage().getMessageId();
 
-        logger.debug("Callback: {}", callbackData);
+        logger.debug("Callback ricevuto: {}", callbackData);
 
         if (callbackData.startsWith("recalls:")) {
             String drugName = callbackData.substring(8);
 
-            // Rispondi al callback per fermare l'animazione
+            // Rimuove la tastiera inline
             try {
                 telegramClient.execute(org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup.builder()
                         .chatId(chatId)
                         .messageId(messageId)
-                        .replyMarkup(null)  // Rimuove la tastiera inline
+                        .replyMarkup(null)
                         .build());
             } catch (Exception e) {
-                logger.warn("Could not remove keyboard: " + e.getMessage());
+                logger.warn("Impossibile rimuovere tastiera: " + e.getMessage());
             }
 
             handleRecalls(chatId, drugName);
+
+        } else if (callbackData.startsWith("morerecalls:")) {
+            // Formato: morerecalls:drugName:offset
+            String[] parts = callbackData.split(":", 3);
+            String drugName = parts[1];
+            int offset = Integer.parseInt(parts[2]);
+
+            // Rimuove la tastiera inline
+            try {
+                telegramClient.execute(org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup.builder()
+                        .chatId(chatId)
+                        .messageId(messageId)
+                        .replyMarkup(null)
+                        .build());
+            } catch (Exception e) {
+                logger.warn("Impossibile rimuovere tastiera: " + e.getMessage());
+            }
+
+            handleRecalls(chatId, drugName, offset);
         }
     }
 

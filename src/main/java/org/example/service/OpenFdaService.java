@@ -48,16 +48,16 @@ public class OpenFdaService {
      * Cerca farmaci per nome (con cache).
      */
     public List<Drug> searchDrug(String searchTerm) throws IOException {
-        logger.info("Searching drug: {}", searchTerm);
+        logger.info("Ricerca farmaco: {}", searchTerm);
 
         // Controlla cache
         Drug cached = getCachedDrug(searchTerm);
         if (cached != null) {
-            logger.info("Cache HIT for: {}", searchTerm);
+            logger.info("Cache HIT per: {}", searchTerm);
             return List.of(cached);
         }
 
-        logger.info("Cache MISS, calling FDA API");
+        logger.info("Cache MISS, chiamata API FDA");
 
         // Chiama API FDA
         String encodedTerm = URLEncoder.encode(searchTerm, StandardCharsets.UTF_8);
@@ -68,7 +68,7 @@ public class OpenFdaService {
 
         String url = String.format("%s/drug/label.json?search=%s&limit=10", FDA_BASE_URL, query);
 
-        logger.debug("FDA URL: {}", url);
+        logger.debug("URL FDA: {}", url);
 
         Request request = new Request.Builder()
                 .url(url)
@@ -77,11 +77,11 @@ public class OpenFdaService {
 
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) {
-                logger.warn("FDA API returned: {}", response.code());
+                logger.warn("API FDA ha risposto con: {}", response.code());
                 if (response.code() == 404) {
-                    throw new IOException("404 - Drug not found in FDA database");
+                    throw new IOException("404 - Farmaco non trovato nel database FDA");
                 }
-                throw new IOException("FDA API error: " + response.code());
+                throw new IOException("Errore API FDA: " + response.code());
             }
 
             String responseBody = response.body().string();
@@ -94,7 +94,7 @@ public class OpenFdaService {
                 saveDrugToCache(drugs.get(0));
             }
 
-            logger.info("Found {} drugs", drugs.size());
+            logger.info("Trovati {} farmaci", drugs.size());
             return drugs;
         }
     }
@@ -161,6 +161,74 @@ public class OpenFdaService {
             JsonNode root = objectMapper.readTree(responseBody);
 
             return parseRecallResults(root);
+        }
+    }
+
+    /**
+     * Ottieni eventi avversi per un farmaco.
+     * Restituisce una mappa con: total, topReactions, serious.
+     */
+    public java.util.Map<String, Object> getAdverseEvents(String drugName) throws IOException {
+        logger.info("Ricerca eventi avversi per: {}", drugName);
+
+        String encodedTerm = URLEncoder.encode(drugName, StandardCharsets.UTF_8);
+        String url = String.format(
+                "%s/drug/event.json?search=patient.drug.medicinalproduct:\"%s\"&limit=100",
+                FDA_BASE_URL, encodedTerm
+        );
+
+        logger.debug("URL FDA Events: {}", url);
+
+        Request request = new Request.Builder()
+                .url(url)
+                .addHeader("User-Agent", "MedBot/1.0")
+                .build();
+
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                if (response.code() == 404) {
+                    logger.info("Nessun evento avverso trovato (404)");
+                    return java.util.Map.of();
+                }
+                throw new IOException("Errore API FDA: " + response.code());
+            }
+
+            String responseBody = response.body().string();
+            JsonNode root = objectMapper.readTree(responseBody);
+
+            return parseAdverseEvents(root);
+        }
+    }
+
+    /**
+     * Ottieni informazioni sulla salute da MyHealthfinder API.
+     */
+    public java.util.Map<String, Object> getHealthInfo(String topic) throws IOException {
+        logger.info("Ricerca informazioni salute per: {}", topic);
+
+        String encodedTopic = URLEncoder.encode(topic, StandardCharsets.UTF_8);
+        String url = String.format(
+                "https://health.gov/myhealthfinder/api/v3/topicsearch.json?keyword=%s",
+                encodedTopic
+        );
+
+        logger.debug("URL MyHealthfinder: {}", url);
+
+        Request request = new Request.Builder()
+                .url(url)
+                .addHeader("User-Agent", "MedBot/1.0")
+                .build();
+
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                logger.warn("MyHealthfinder API ha risposto con: {}", response.code());
+                return null;
+            }
+
+            String responseBody = response.body().string();
+            JsonNode root = objectMapper.readTree(responseBody);
+
+            return parseHealthInfo(root);
         }
     }
 
@@ -260,6 +328,132 @@ public class OpenFdaService {
         }
 
         return recalls;
+    }
+
+    private java.util.Map<String, Object> parseAdverseEvents(JsonNode root) {
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+
+        JsonNode results = root.get("results");
+        if (results == null || !results.isArray()) {
+            return result;
+        }
+
+        result.put("total", results.size());
+
+        // Conta reazioni più comuni
+        java.util.Map<String, Integer> reactions = new java.util.HashMap<>();
+        int serious = 0;
+        int nonSerious = 0;
+
+        for (JsonNode event : results) {
+            // Conta gravità
+            if (event.has("serious") && event.get("serious").asInt() == 1) {
+                serious++;
+            } else {
+                nonSerious++;
+            }
+
+            // Estrai reazioni
+            if (event.has("patient")) {
+                JsonNode patient = event.get("patient");
+                if (patient.has("reaction")) {
+                    JsonNode reactionsNode = patient.get("reaction");
+                    if (reactionsNode.isArray()) {
+                        for (JsonNode reaction : reactionsNode) {
+                            if (reaction.has("reactionmeddrapt")) {
+                                String reactionName = reaction.get("reactionmeddrapt").asText().toLowerCase();
+                                reactions.put(reactionName, reactions.getOrDefault(reactionName, 0) + 1);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Ordina reazioni per frequenza
+        var sortedReactions = reactions.entrySet().stream()
+                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+                .limit(10)
+                .collect(java.util.LinkedHashMap::new,
+                        (m, e) -> m.put(e.getKey(), e.getValue()),
+                        java.util.Map::putAll);
+
+        result.put("topReactions", sortedReactions);
+        result.put("serious", java.util.Map.of("serious", serious, "nonSerious", nonSerious));
+
+        return result;
+    }
+
+    private java.util.Map<String, Object> parseHealthInfo(JsonNode root) {
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+
+        JsonNode resultNode = root.get("Result");
+        if (resultNode == null) {
+            return null;
+        }
+
+        JsonNode resources = resultNode.get("Resources");
+        if (resources == null || !resources.has("Resource") || !resources.get("Resource").isArray()) {
+            return null;
+        }
+
+        JsonNode resourceArray = resources.get("Resource");
+        if (resourceArray.size() == 0) {
+            return null;
+        }
+
+        // Prendi il primo risultato più rilevante
+        JsonNode resource = resourceArray.get(0);
+
+        if (resource.has("Title")) {
+            result.put("title", resource.get("Title").asText());
+        }
+
+        if (resource.has("AccessibleVersion")) {
+            result.put("url", resource.get("AccessibleVersion").asText());
+        }
+
+        // Estrai sezioni
+        java.util.List<java.util.Map<String, String>> sections = new java.util.ArrayList<>();
+
+        if (resource.has("Sections")) {
+            JsonNode sectionsNode = resource.get("Sections");
+            if (sectionsNode.has("section") && sectionsNode.get("section").isArray()) {
+                for (JsonNode section : sectionsNode.get("section")) {
+                    java.util.Map<String, String> sectionData = new java.util.HashMap<>();
+
+                    if (section.has("Title")) {
+                        sectionData.put("title", section.get("Title").asText());
+                    }
+
+                    if (section.has("Content")) {
+                        // Pulisci HTML tags
+                        String content = section.get("Content").asText();
+                        content = content.replaceAll("<[^>]+>", " ")
+                                .replaceAll("\\s+", " ")
+                                .trim();
+                        // Limita a 300 caratteri per sezione
+                        if (content.length() > 300) {
+                            content = content.substring(0, 297) + "...";
+                        }
+                        sectionData.put("content", content);
+                    }
+
+                    if (!sectionData.isEmpty()) {
+                        sections.add(sectionData);
+                    }
+
+                    // Limita a 3 sezioni
+                    if (sections.size() >= 3) break;
+                }
+            }
+        }
+
+        if (!sections.isEmpty()) {
+            result.put("sections", sections);
+        }
+
+        return result;
     }
 
     /**

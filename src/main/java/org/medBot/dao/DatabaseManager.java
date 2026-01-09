@@ -44,7 +44,7 @@ public class DatabaseManager {
     /**
      * Crea le tabelle del database se non esistono.
      */
-    private void initializeDatabase() {
+    public void initializeDatabase() {
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement()) {
 

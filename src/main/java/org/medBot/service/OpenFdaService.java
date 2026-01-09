@@ -8,8 +8,6 @@ import okhttp3.Response;
 import org.medBot.dao.DatabaseManager;
 import org.medBot.model.Drug;
 import org.medBot.model.Recall;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -26,7 +24,6 @@ import java.util.List;
  * Gestisce richieste HTTP e parsing JSON con caching su database.
  */
 public class OpenFdaService {
-    private static final Logger logger = LoggerFactory.getLogger(OpenFdaService.class);
     private static final String FDA_BASE_URL = "https://api.fda.gov";
     private static final int CACHE_HOURS = 24;
 
@@ -47,16 +44,16 @@ public class OpenFdaService {
      * Cerca farmaci per nome utilizzando la cache del database.
      */
     public List<Drug> searchDrug(String searchTerm) throws IOException {
-        logger.info("Ricerca farmaco: {}", searchTerm);
+        System.out.println("Ricerca farmaco: " + searchTerm);
 
         //Controlla se il farmaco è in cache
         Drug cached = getCachedDrug(searchTerm);
         if (cached != null) {
-            logger.info("Cache HIT per: {}", searchTerm);
+            System.out.println("Cache HIT");
             return List.of(cached);
         }
 
-        logger.info("Cache MISS, chiamata API FDA");
+        System.out.println("Cache MISS, chiamata API");
 
         //Chiama l'API OpenFDA
         String encodedTerm = URLEncoder.encode(searchTerm, StandardCharsets.UTF_8);
@@ -97,8 +94,6 @@ public class OpenFdaService {
      * Cerca richiami FDA per un farmaco specifico.
      */
     public List<Recall> searchRecalls(String searchTerm) throws IOException {
-        logger.info("Ricerca richiami per: {}", searchTerm);
-
         String encodedTerm = URLEncoder.encode(searchTerm, StandardCharsets.UTF_8);
         String url = String.format(
                 "%s/drug/enforcement.json?search=product_description:\"%s\"&limit=20",
@@ -127,8 +122,6 @@ public class OpenFdaService {
      * Ottiene gli ultimi richiami FDA (tutti i farmaci).
      */
     public List<Recall> getRecentRecalls(int limit) throws IOException {
-        logger.info("Ricerca ultimi {} richiami", limit);
-
         String url = String.format(
                 "%s/drug/enforcement.json?limit=%d&sort=report_date:desc",
                 FDA_BASE_URL, limit);
@@ -153,8 +146,6 @@ public class OpenFdaService {
      * Ottiene eventi avversi (effetti collaterali) per un farmaco.
      */
     public java.util.Map<String, Object> getAdverseEvents(String drugName) throws IOException {
-        logger.info("Ricerca eventi avversi per: {}", drugName);
-
         String encodedTerm = URLEncoder.encode(drugName, StandardCharsets.UTF_8);
         String url = String.format(
                 "%s/drug/event.json?search=patient.drug.medicinalproduct:\"%s\"&limit=100",
@@ -180,12 +171,10 @@ public class OpenFdaService {
     }
 
     /**
-     * NUOVO: Verifica interazioni tra più farmaci.
+     * Verifica interazioni tra più farmaci.
      * Cerca eventi avversi quando i farmaci sono usati insieme.
      */
     public java.util.Map<String, Object> checkDrugInteractions(String[] drugs) throws IOException {
-        logger.info("Verifica interazioni tra: {}", String.join(", ", drugs));
-
         //Costruisce la query per cercare eventi che coinvolgono tutti i farmaci
         StringBuilder queryBuilder = new StringBuilder();
         for (int i = 0; i < drugs.length; i++) {
@@ -197,8 +186,6 @@ public class OpenFdaService {
         String url = String.format(
                 "%s/drug/event.json?search=%s&limit=100",
                 FDA_BASE_URL, queryBuilder.toString());
-
-        logger.debug("URL interazioni: {}", url);
 
         Request request = new Request.Builder()
                 .url(url)
@@ -221,51 +208,63 @@ public class OpenFdaService {
 
     /**
      * Verifica se un farmaco è una sostanza controllata.
+     * FIX: Usa l'approccio corretto cercando nell'NDC directory e poi verifica schedule.
      */
     public String checkDrugSchedule(String drugName) throws IOException {
-        logger.info("Verifica classificazione DEA per: {}", drugName);
-
+        System.out.println("Verifica sostanza controllata: " + drugName);
+        
+        //Prima cerca il farmaco nell'endpoint label con il campo dea_schedule
         String encodedTerm = URLEncoder.encode(drugName, StandardCharsets.UTF_8);
-        String url = String.format(
-                "%s/drug/label.json?search=(openfda.brand_name:\"%s\"+OR+openfda.generic_name:\"%s\")+AND+_exists_:openfda.dea_schedule&limit=1",
-                FDA_BASE_URL, encodedTerm, encodedTerm);
+        
+        //Prova diverse query per trovare il farmaco
+        String[] queries = {
+            //Query 1: Cerca con brand name o generic name E controlla se esiste dea_schedule
+            String.format("(openfda.brand_name:\"%s\"+OR+openfda.generic_name:\"%s\")", 
+                encodedTerm, encodedTerm),
+            //Query 2: Cerca solo per generic name
+            String.format("openfda.generic_name:\"%s\"", encodedTerm),
+            //Query 3: Cerca solo per brand name  
+            String.format("openfda.brand_name:\"%s\"", encodedTerm)
+        };
+        
+        for (String query : queries) {
+            String url = String.format("%s/drug/label.json?search=%s&limit=5", FDA_BASE_URL, query);
+            System.out.println("Tentativo query: " + url);
+            
+            Request request = new Request.Builder()
+                    .url(url)
+                    .addHeader("User-Agent", "MedBot/1.0")
+                    .build();
 
-        Request request = new Request.Builder()
-                .url(url)
-                .addHeader("User-Agent", "MedBot/1.0")
-                .build();
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (response.isSuccessful()) {
+                    String responseBody = response.body().string();
+                    JsonNode root = objectMapper.readTree(responseBody);
 
-        try (Response response = httpClient.newCall(request).execute()) {
-            if (!response.isSuccessful() || response.code() == 404) {
-                return null;
-            }
-
-            String responseBody = response.body().string();
-            JsonNode root = objectMapper.readTree(responseBody);
-
-            JsonNode results = root.get("results");
-            if (results != null && results.isArray() && results.size() > 0) {
-                JsonNode openfda = results.get(0).get("openfda");
-                if (openfda != null && openfda.has("dea_schedule")) {
-                    JsonNode schedules = openfda.get("dea_schedule");
-                    if (schedules.isArray() && schedules.size() > 0) {
-                        String schedule = schedules.get(0).asText();
-                        //Rimuove il prefisso "C" se presente (es. "CII" -> "II")
-                        schedule = schedule.replaceAll("^C", "");
-                        return schedule;
+                    JsonNode results = root.get("results");
+                    if (results != null && results.isArray() && results.size() > 0) {
+                        //Cerca in tutti i risultati se c'è un dea_schedule
+                        for (JsonNode result : results) {
+                            JsonNode openfda = result.get("openfda");
+                            if (openfda != null && openfda.has("dea_schedule")) {
+                                JsonNode schedules = openfda.get("dea_schedule");
+                                if (schedules.isArray() && schedules.size() > 0) {
+                                    String schedule = schedules.get(0).asText();
+                                    //Rimuove il prefisso "C" se presente (es. "CII" -> "II")
+                                    schedule = schedule.replaceAll("^C", "");
+                                    System.out.println("Trovato Schedule: " + schedule);
+                                    return schedule;
+                                }
+                            }
+                        }
                     }
                 }
+            } catch (Exception e) {
+                System.out.println("Errore query: " + e.getMessage());
             }
-
-            return null;
         }
-    }
-
-    /**
-     * Ottiene informazioni sulla salute (non più usato, sostituito da /interazioni).
-     */
-    @Deprecated
-    public java.util.Map<String, Object> getHealthInfo(String topic) throws IOException {
+        
+        System.out.println("Nessun schedule trovato");
         return null;
     }
 
@@ -321,7 +320,7 @@ public class OpenFdaService {
                 }
 
             } catch (Exception e) {
-                logger.error("Errore parsing farmaco", e);
+                System.out.println("Errore parsing farmaco: " + e.getMessage());
             }
         }
 
@@ -366,7 +365,7 @@ public class OpenFdaService {
                 recalls.add(recall);
 
             } catch (Exception e) {
-                logger.error("Errore parsing richiamo", e);
+                System.out.println("Errore parsing richiamo: " + e.getMessage());
             }
         }
 
@@ -508,7 +507,7 @@ public class OpenFdaService {
             }
 
         } catch (Exception e) {
-            logger.error("Errore lettura cache", e);
+            System.out.println("Errore cache: " + e.getMessage());
         }
 
         return null;
@@ -533,10 +532,9 @@ public class OpenFdaService {
             pstmt.setString(5, drug.getIndications());
 
             pstmt.executeUpdate();
-            logger.debug("Farmaco salvato in cache: {}", drug.getBrandName());
 
         } catch (Exception e) {
-            logger.error("Errore salvataggio cache", e);
+            System.out.println("Errore salvataggio cache: " + e.getMessage());
         }
     }
 

@@ -1,4 +1,4 @@
-package org.example;
+package org.medBot;
 
 
 import org.apache.commons.configuration2.Configuration;

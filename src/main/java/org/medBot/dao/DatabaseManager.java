@@ -1,6 +1,6 @@
-package org.example.dao;
+package org.medBot.dao;
 
-import org.example.MyConfiguration;
+import org.medBot.MyConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -100,38 +100,10 @@ public class DatabaseManager {
 
             logger.info("Database pronto.");
 
-            // Inseriamo dati di prova se vuoto
-            insertSampleData(conn);
 
         } catch (SQLException e) {
             logger.error("Errore inizializzazione DB", e);
             throw new RuntimeException("Impossibile inizializzare il database", e);
-        }
-    }
-
-    private void insertSampleData(Connection conn) {
-        try (Statement stmt = conn.createStatement()) {
-            var rs = stmt.executeQuery("SELECT COUNT(*) FROM drugs_cache");
-            if (rs.next() && rs.getInt(1) > 0) {
-                return; // Dati già presenti
-            }
-
-            // Dati iniziali per testare senza internet
-            stmt.execute("""
-                        INSERT OR IGNORE INTO drugs_cache
-                        (drug_id, brand_name, generic_name, manufacturer, indications) VALUES
-                        ('aspirin-001', 'Aspirin', 'Acetylsalicylic acid', 'Bayer',
-                         'Antidolorifico e antipiretico. Usato per mal di testa e dolori muscolari.'),
-                        ('ibuprofen-001', 'Advil', 'Ibuprofen', 'Pfizer',
-                         'Antinfiammatorio non steroideo (FANS).'),
-                        ('tachipirina-001', 'Tachipirina', 'Paracetamol', 'Angelini',
-                         'Antipiretico e analgesico.')
-                    """);
-
-            logger.info("Dati di esempio inseriti.");
-
-        } catch (SQLException e) {
-            logger.warn("Errore inserimento dati sample: " + e.getMessage());
         }
     }
 }

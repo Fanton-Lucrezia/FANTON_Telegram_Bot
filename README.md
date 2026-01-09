@@ -76,7 +76,7 @@ mvn clean package
 ### 4. Esegui il Bot
 
 ```bash
-mvn exec:java -Dexec.mainClass="org.example.Main"
+mvn exec:java -Dexec.mainClass="org.medBot.Main"
 ```
 
 Oppure esegui il JAR compilato:

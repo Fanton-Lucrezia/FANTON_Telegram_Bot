@@ -1,7 +1,7 @@
-package org.example;
+package org.medBot;
 
-import org.example.bot.MedBot;
-import org.example.dao.DatabaseManager;
+import org.medBot.bot.MedBot;
+import org.medBot.dao.DatabaseManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.telegram.telegrambots.longpolling.TelegramBotsLongPollingApplication;
@@ -20,7 +20,7 @@ public class Main {
             if (botToken == null || botToken.trim().isEmpty() || botToken.contains("inserisci")) {
                 logger.error("BOT_TOKEN not configured! Please set it in config.properties");
                 System.err.println("ERROR: BOT_TOKEN not configured in config.properties");
-                System.exit(1);
+                System.exit(-1);
             }
 
             // Initialize database
@@ -44,7 +44,7 @@ public class Main {
         } catch (Exception e) {
             logger.error("Fatal error starting bot", e);
             e.printStackTrace();
-            System.exit(1);
+            System.exit(-1);
         }
     }
 }

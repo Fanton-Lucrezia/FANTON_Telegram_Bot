@@ -1,13 +1,13 @@
-package org.example.service;
+package org.medBot.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.example.dao.DatabaseManager;
-import org.example.model.Drug;
-import org.example.model.Recall;
+import org.medBot.dao.DatabaseManager;
+import org.medBot.model.Drug;
+import org.medBot.model.Recall;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

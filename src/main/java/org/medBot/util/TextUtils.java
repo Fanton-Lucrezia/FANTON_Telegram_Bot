@@ -1,4 +1,4 @@
-package org.example.util;
+package org.medBot.util;
 
 /**
  * Utility class for text processing and formatting.

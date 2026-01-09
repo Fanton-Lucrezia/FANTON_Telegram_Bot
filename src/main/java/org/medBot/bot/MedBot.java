@@ -1,10 +1,10 @@
-package org.example.bot;
+package org.medBot.bot;
 
-import org.example.MyConfiguration;
-import org.example.dao.DatabaseManager;
-import org.example.model.Drug;
-import org.example.model.Recall;
-import org.example.service.OpenFdaService;
+import org.medBot.MyConfiguration;
+import org.medBot.dao.DatabaseManager;
+import org.medBot.model.Drug;
+import org.medBot.model.Recall;
+import org.medBot.service.OpenFdaService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient;

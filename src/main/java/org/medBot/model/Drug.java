@@ -1,4 +1,4 @@
-package org.example.model;
+package org.medBot.model;
 
 import java.time.LocalDateTime;
 

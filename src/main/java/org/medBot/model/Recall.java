@@ -1,4 +1,4 @@
-package org.example.model;
+package org.medBot.model;
 
 /**
  * Model class representing an FDA enforcement report (recall).

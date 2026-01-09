@@ -2,8 +2,6 @@ package org.medBot.bot;
 
 import org.medBot.MyConfiguration;
 import org.medBot.dao.DatabaseManager;
-import org.medBot.handler.*;
-import org.medBot.service.OpenFdaService;
 import org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient;
 import org.telegram.telegrambots.longpolling.util.LongPollingSingleThreadUpdateConsumer;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -12,58 +10,24 @@ import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
- * Bot Telegram per informazioni su farmaci.
- * Usa un sistema di handler per gestire i comandi in modo ordinato.
+ * Bot Telegram per informazioni su farmaci tramite API OpenFDA.
+ * Classe principale che gestisce gli update e delega i comandi al CommandHandler.
  */
 public class MedBot implements LongPollingSingleThreadUpdateConsumer {
     private final TelegramClient telegramClient;
-    private final OpenFdaService fdaService;
+    private final MessageSender messageSender;
+    private final CommandHandler commandHandler;
     private final DatabaseManager dbManager;
-    
-    //Mappa che associa ogni comando al suo handler
-    private final Map<String, CommandHandler> handlers;
-    
-    //Handler speciali per callback e ricerche paginate
-    private final SearchHandler searchHandler;
-    private final RecallsHandler recallsHandler;
-    private final BookmarksHandler bookmarksHandler;
 
     public MedBot() {
         String botToken = MyConfiguration.getInstance().getProperty("BOT_TOKEN");
         this.telegramClient = new OkHttpTelegramClient(botToken);
-        this.fdaService = new OpenFdaService();
+        this.messageSender = new MessageSender(telegramClient);
+        this.commandHandler = new CommandHandler(messageSender);
         this.dbManager = DatabaseManager.getInstance();
-        
-        //Inizializza gli handler
-        this.handlers = new HashMap<>();
-        this.searchHandler = new SearchHandler(fdaService, dbManager);
-        this.recallsHandler = new RecallsHandler(fdaService);
-        this.bookmarksHandler = new BookmarksHandler(dbManager);
-        
-        //Registra tutti i comandi con i relativi handler
-        registerHandler(new StartHandler());
-        registerHandler(new HelpHandler());
-        registerHandler(searchHandler);
-        registerHandler(recallsHandler);
-        registerHandler(new StatsHandler(dbManager));
-        registerHandler(new RecentHandler(dbManager));
-        registerHandler(new ControlledSubstanceHandler(fdaService));
-        registerHandler(new AdverseEventsHandler(fdaService));
-        registerHandler(new InteractionsHandler(fdaService));
-        registerHandler(bookmarksHandler);
-        
-        System.out.println("MedBot inizializzato con " + handlers.size() + " comandi");
-    }
-    
-    /**
-     * Registra un handler nella mappa dei comandi.
-     */
-    private void registerHandler(CommandHandler handler) {
-        handlers.put(handler.getCommandName(), handler);
+        System.out.println("MedBot inizializzato");
     }
 
     @Override
@@ -79,9 +43,9 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
 
             //Gestisce i comandi
             if (messageText.startsWith("/")) {
-                handleCommand(chatId, messageText);
+                handleCommand(chatId, messageText, username);
             } else {
-                handlers.get("start").handle(chatId, "", telegramClient);
+                messageSender.sendMessageWithMenu(chatId, "❓ Comando non riconosciuto. Usa il menù:");
             }
         }
         //Gestisce i callback dai bottoni inline
@@ -91,22 +55,27 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
     }
 
     /**
-     * Gestisce i comandi ricevuti dall'utente.
-     * Divide il comando e lo passa all'handler appropriato.
+     * Distribuisce i comandi al CommandHandler appropriato.
      */
-    private void handleCommand(long chatId, String message) {
+    private void handleCommand(long chatId, String message, String username) {
         //Divide il comando dagli argomenti
         String[] parts = message.split("\\s+", 2);
-        String command = parts[0].substring(1).toLowerCase(); //Rimuove lo /
+        String command = parts[0].toLowerCase();
         String args = parts.length > 1 ? parts[1].trim() : "";
 
-        //Cerca l'handler per il comando
-        CommandHandler handler = handlers.get(command);
-        
-        if (handler != null) {
-            handler.handle(chatId, args, telegramClient);
-        } else {
-            handlers.get("start").handle(chatId, "", telegramClient);
+        //Esegue il comando corrispondente
+        switch (command) {
+            case "/start" -> commandHandler.handleStart(chatId, username);
+            case "/help" -> commandHandler.handleHelp(chatId);
+            case "/cerca" -> commandHandler.handleSearchDrug(chatId, args, 0);
+            case "/richiami" -> commandHandler.handleRecalls(chatId, args, 0);
+            case "/mystats" -> commandHandler.handleMyStats(chatId);
+            case "/recenti" -> commandHandler.handleRecentSearches(chatId);
+            case "/farmacolegale" -> commandHandler.handleControlledSubstance(chatId, args);
+            case "/effetticollaterali" -> commandHandler.handleAdverseEvents(chatId, args);
+            case "/interazioni" -> commandHandler.handleDrugInteractions(chatId, args);
+            case "/bookmarks" -> commandHandler.handleBookmarks(chatId, args);
+            default -> messageSender.sendMessageWithMenu(chatId, "❓ Comando sconosciuto. Usa /help:");
         }
     }
 
@@ -127,30 +96,27 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
                             .replyMarkup(null)
                             .build());
         } catch (TelegramApiException e) {
-            //Ignora errori di rimozione tastiera
+            //Ignora errori (es. messaggio troppo vecchio)
         }
 
         //Gestisce i diversi tipi di callback
         if (callbackData.startsWith("recalls:")) {
             String drugName = callbackData.substring(8);
-            recallsHandler.handleRecalls(chatId, drugName, 0, telegramClient);
-            
+            commandHandler.handleRecalls(chatId, drugName, 0);
         } else if (callbackData.startsWith("morerecalls:")) {
             String[] parts = callbackData.split(":", 3);
-            recallsHandler.handleRecalls(chatId, parts[1], Integer.parseInt(parts[2]), telegramClient);
-            
+            commandHandler.handleRecalls(chatId, parts[1], Integer.parseInt(parts[2]));
         } else if (callbackData.startsWith("moredrugs:")) {
             String[] parts = callbackData.split(":", 3);
-            searchHandler.handleSearch(chatId, parts[1], Integer.parseInt(parts[2]), telegramClient);
-            
+            commandHandler.handleSearchDrug(chatId, parts[1], Integer.parseInt(parts[2]));
         } else if (callbackData.startsWith("bookmark:")) {
             String drugName = callbackData.substring(9);
-            bookmarksHandler.addBookmark(chatId, drugName, telegramClient);
+            commandHandler.handleBookmarks(chatId, "add " + drugName);
         }
     }
 
     /**
-     * Registra un utente nel database.
+     * Registra un utente nel database (o aggiorna last_active).
      */
     private void registerUser(long chatId, String username) {
         try (Connection conn = dbManager.getConnection();

@@ -52,7 +52,7 @@ public class MessageSender {
         ReplyKeyboardMarkup keyboard = ReplyKeyboardMarkup.builder()
                 .keyboard(List.of(row1, row2))
                 .resizeKeyboard(true)
-                .persistent(true)
+                //.persistent(true)
                 .build();
         
         SendMessage message = SendMessage.builder()

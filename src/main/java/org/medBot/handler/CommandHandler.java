@@ -10,10 +10,6 @@ public interface CommandHandler {
     
     /**
      * Gestisce il comando ricevuto dall'utente.
-     * 
-     * @param chatId ID della chat Telegram
-     * @param args Argomenti del comando (testo dopo il comando)
-     * @param telegramClient Client Telegram per inviare risposte
      */
     void handle(long chatId, String args, TelegramClient telegramClient);
     

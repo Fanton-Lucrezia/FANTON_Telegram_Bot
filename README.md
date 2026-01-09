@@ -1,57 +1,55 @@
-# 💊 MedBot - Bot Telegram per Informazioni su Farmaci
+# 💊 MedBot - Bot Telegram per Informazioni Farmaci
 
-![Java](https://img.shields.io/badge/Java-21-orange)
-![Telegram](https://img.shields.io/badge/Telegram-Bot-blue)
-![FDA](https://img.shields.io/badge/API-OpenFDA-green)
-![Database](https://img.shields.io/badge/Database-SQLite-lightgrey)
+[![Java](https://img.shields.io/badge/Java-17+-orange.svg)](https://www.java.com)
+[![Telegram](https://img.shields.io/badge/Telegram-Bot-blue.svg)](https://telegram.org)
+[![OpenFDA](https://img.shields.io/badge/API-OpenFDA-green.svg)](https://open.fda.gov)
+[![License](https://img.shields.io/badge/License-Educational-yellow.svg)](LICENSE)
+
+> Bot Telegram per ricercare informazioni su farmaci utilizzando le API ufficiali della FDA (Food and Drug Administration) americana.
+
+---
 
 ## 📝 Descrizione Progetto
 
-**MedBot** è un bot Telegram sviluppato in Java che fornisce informazioni su farmaci e medicine utilizzando le API pubbliche della **FDA (Food and Drug Administration)** americana. Il bot permette agli utenti di cercare farmaci, verificare richiami di sicurezza, controllare effetti collaterali e molto altro.
+**MedBot** è un bot Telegram educativo che permette di:
+- 🔍 **Cercare farmaci** per nome con informazioni dettagliate
+- ⚠️ **Verificare richiami FDA** per controllare la sicurezza
+- 🔬 **Controllare interazioni** tra più farmaci
+- 🚨 **Verificare sostanze controllate** (rischio dipendenza)
+- 🔴 **Consultare effetti collaterali** segnalati
+- ⭐ **Salvare farmaci preferiti** per accesso rapido
+- 📊 **Visualizzare statistiche** personali di utilizzo
 
-Il progetto è stato sviluppato per la materia **TPSIT** (Tecnologie e Progettazione di Sistemi Informatici e di Telecomunicazioni) come progetto scolastico.
-
-### ✨ Caratteristiche Principali
-
-- 🔍 **Ricerca farmaci** con informazioni dettagliate
-- ⚠️ **Verifica richiami FDA** per la sicurezza
-- 💊 **Controllo effetti collaterali** segnalati
-- 🚨 **Verifica sostanze controllate** (farmaci con rischio dipendenza)
-- 🔬 **Analisi interazioni tra farmaci** (NUOVO!)
-- 📊 **Statistiche personali** e cronologia ricerche
-- ⭐ **Bookmark** per salvare farmaci preferiti
-- 🎹 **Menù con bottoni** per facilità d'uso
-- 💾 **Database SQLite** per caching e persistenza dati
+Il bot utilizza un'**interfaccia moderna** con:
+- 🟢 Tastiera permanente per comandi rapidi
+- 🔘 Bottoni inline per azioni contestuali
+- 📋 Paginazione per navigare tra i risultati
+- 💾 Database SQLite per caching e storico
 
 ---
 
 ## 🔗 API Utilizzate
 
-### 1. OpenFDA API
+Il bot si basa sulle **OpenFDA API** ufficiali della FDA americana:
 
-**Link:** [https://open.fda.gov/apis/](https://open.fda.gov/apis/)
+### 1. Drug Label API
+- **Endpoint**: `https://api.fda.gov/drug/label.json`
+- **Documentazione**: [https://open.fda.gov/apis/drug/label/](https://open.fda.gov/apis/drug/label/)
+- **Uso**: Informazioni dettagliate sui farmaci (indicazioni, produttore, principio attivo)
 
-La **OpenFDA API** è l'API pubblica della Food and Drug Administration americana. Fornisce accesso a diversi database governativi:
+### 2. Drug Enforcement API
+- **Endpoint**: `https://api.fda.gov/drug/enforcement.json`
+- **Documentazione**: [https://open.fda.gov/apis/drug/enforcement/](https://open.fda.gov/apis/drug/enforcement/)
+- **Uso**: Richiami e ritiri di farmaci dal mercato
 
-- **Drug Labels** - Informazioni sui farmaci approvati
-- **Drug Enforcement** - Richiami di sicurezza
-- **Drug Adverse Events** - Segnalazioni di effetti collaterali
+### 3. Drug Event API (FAERS)
+- **Endpoint**: `https://api.fda.gov/drug/event.json`
+- **Documentazione**: [https://open.fda.gov/apis/drug/event/](https://open.fda.gov/apis/drug/event/)
+- **Uso**: Eventi avversi (effetti collaterali) e interazioni tra farmaci
 
-#### Documentazione API OpenFDA:
-- [Drug Labels API](https://open.fda.gov/apis/drug/label/)
-- [Drug Enforcement API](https://open.fda.gov/apis/drug/enforcement/)
-- [Drug Adverse Events API](https://open.fda.gov/apis/drug/event/)
-
-#### Note Importanti:
-- L'API è **gratuita** e non richiede API key
-- I dati sono in **lingua inglese**
-- Limite di 1000 richieste al giorno per IP
-
-### 2. Telegram Bot API
-
-**Link:** [https://core.telegram.org/bots/api](https://core.telegram.org/bots/api)
-
-Utilizzata tramite la libreria **telegrambots** per l'interazione con gli utenti.
+### Parametri di Ricerca OpenFDA
+- **Documentazione generale**: [https://open.fda.gov/apis/query-parameters/](https://open.fda.gov/apis/query-parameters/)
+- **Esempi di query**: [https://open.fda.gov/apis/drug/label/example-api-queries/](https://open.fda.gov/apis/drug/label/example-api-queries/)
 
 ---
 
@@ -59,335 +57,315 @@ Utilizzata tramite la libreria **telegrambots** per l'interazione con gli utenti
 
 ### Prerequisiti
 
-- **Java 21** o superiore
-- **Maven 3.x**
-- Account Telegram
+- **Java 17+** installato ([Download](https://www.oracle.com/java/technologies/downloads/))
+- **Maven 3.6+** installato ([Download](https://maven.apache.org/download.cgi))
+- **Bot Telegram** creato tramite [@BotFather](https://t.me/BotFather)
 
-### 1. Crea il Bot Telegram
-
-1. Apri Telegram e cerca **@BotFather**
-2. Invia il comando `/newbot`
-3. Segui le istruzioni per scegliere un nome e username
-4. **Salva il token** che ricevi (es. `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
-
-### 2. Clona il Repository
+### 1️⃣ Clona il Repository
 
 ```bash
 git clone https://github.com/Fanton-Lucrezia/FANTON_Telegram_Bot.git
 cd FANTON_Telegram_Bot
 ```
 
-### 3. Configura il Bot
+### 2️⃣ Crea il File di Configurazione
 
-Crea un file `config.properties` nella directory principale del progetto:
+Crea il file `config.properties` nella root del progetto:
 
 ```properties
-BOT_TOKEN=il_tuo_token_qui
+# Token del bot ottenuto da @BotFather
+BOT_TOKEN=il_tuo_bot_token_qui
+
+# Percorso del database SQLite
 DB_PATH=./data/medbot.db
 ```
 
-**Importante:** Il file `config.properties` è ignorato da git (`.gitignore`) per sicurezza.
+⚠️ **Importante**: Il file `config.properties` è già nel `.gitignore` per proteggere il token.
 
-### 4. Compila il Progetto
+### 3️⃣ Installa le Dipendenze
 
 ```bash
-mvn clean package
+mvn clean install
 ```
 
-Questo comando:
-- Scarica le dipendenze necessarie
-- Compila il codice Java
-- Crea il file JAR eseguibile in `target/`
+Il `pom.xml` include tutte le dipendenze necessarie:
+- `telegrambots-longpolling` (7.10.0) - Gestione bot Telegram
+- `sqlite-jdbc` (3.47.2.0) - Database SQLite
+- `okhttp` (4.12.0) - Client HTTP per API
+- `jackson-databind` (2.18.2) - Parsing JSON
 
-### 5. Avvia il Bot
+### 4️⃣ Inizializza il Database
+
+Il database viene creato **automaticamente** al primo avvio del bot con le tabelle necessarie.
+
+### 5️⃣ Compila ed Esegui
 
 ```bash
+# Compila il progetto
+mvn clean package
+
+# Esegui il bot
 java -jar target/FANTON_Telegram_Bot-1.0-SNAPSHOT.jar
 ```
 
-Il bot sarà attivo e risponderà ai comandi su Telegram!
+Dovresti vedere:
+```
+Database inizializzato correttamente!
+MedBot inizializzato con 10 comandi
+Bot avviato con successo!
+```
 
 ---
 
-## 📚 Guida all'Utilizzo
+## 📱 Guida all'Utilizzo
 
-### Menù Principale
+### Comandi Disponibili
 
-Appena avvii il bot con `/start`, apparirà una **tastiera permanente** con i comandi principali:
-
-```
-[🔍 Cerca]  [⚠️ Richiami]  [🔬 Interazioni]
-[📊 Stats]  [⭐ Preferiti]  [❓ Help]
-```
-
-Puoi usare sia i bottoni che digitare i comandi manualmente.
-
-### 📝 Comandi Disponibili
-
-#### Comandi Base
-
-- `/start` - Messaggio di benvenuto e menù
-- `/help` - Mostra la guida completa dei comandi
+#### 🎯 Comandi Base
+- `/start` - Messaggio di benvenuto e attivazione menù
+- `/help` - Guida completa ai comandi
 
 #### 🔍 Ricerca Farmaci
+```
+/cerca <nome>
+```
+Ricerca farmaci per nome (brand o generico).
 
-```
-/cerca <nome_farmaco>
-```
+**Esempio**: `/cerca aspirin`
 
-**Esempio:**
+#### ⚠️ Sicurezza e Richiami
 ```
-/cerca aspirin
+/richiami <nome|all>
 ```
+Verifica richiami FDA per un farmaco o mostra tutti i richiami recenti.
 
-**Cosa restituisce:**
-- Nome commerciale (brand name)
-- Principio attivo (generic name)
-- Produttore
-- Indicazioni terapeutiche
-- Bottoni per azioni rapide (richiami, salva preferiti)
+**Esempi**: 
+- `/richiami aspirin`
+- `/richiami all`
 
-#### ⚠️ Sicurezza e Legalità
+#### 🚨 Sostanze Controllate
+```
+/farmacolegale <nome>
+```
+Verifica se un farmaco è classificato come sostanza controllata (DEA Schedule).
 
-**1. Verifica Richiami FDA**
-```
-/richiami <nome_farmaco>
-/richiami all
-```
+**Esempio**: `/farmacolegale oxycodone`
 
-**Esempi:**
-```
-/richiami aspirin
-/richiami all
-```
+**Classificazioni**:
+- **Schedule I**: Alto potenziale abuso, nessun uso medico
+- **Schedule II**: Alto potenziale abuso (morfina, oxycodone, metadone)
+- **Schedule III**: Moderato potenziale abuso (codeina, ketamina)
+- **Schedule IV**: Basso potenziale abuso (xanax, valium)
+- **Schedule V**: Molto basso potenziale abuso
 
-Mostra i richiami di sicurezza con classificazione:
-- **Class I**: Rischio grave per la salute
-- **Class II**: Rischio temporaneo
-- **Class III**: Rischio minimo
+#### 🔴 Effetti Collaterali
+```
+/effetticollaterali <nome>
+```
+Mostra effetti collaterali segnalati al sistema FAERS della FDA.
 
-**2. Verifica Sostanza Controllata**
-```
-/farmacolegale <nome_farmaco>
-```
+**Esempio**: `/effetticollaterali ibuprofen`
 
-**Esempio:**
+#### 🔬 Interazioni tra Farmaci
 ```
-/farmacolegale oxycodone
+/interazioni <farmaco1 + farmaco2 + ...>
 ```
+Verifica se ci sono segnalazioni di eventi avversi quando i farmaci sono usati insieme.
 
-Verifica se un farmaco è classificato come sostanza controllata dalla DEA (Drug Enforcement Administration) e mostra la classificazione Schedule (I-V).
-
-**3. Effetti Collaterali**
-```
-/effetticollaterali <nome_farmaco>
-```
-
-**Esempio:**
-```
-/effetticollaterali aspirin
-```
-
-Mostra gli effetti collaterali più segnalati dagli utenti nel database FDA.
-
-**4. Interazioni tra Farmaci** 🆕
-```
-/interazioni <farmaco1 + farmaco2>
-```
-
-**Esempi:**
-```
-/interazioni aspirin + ibuprofen
-/interazioni warfarin + aspirin
-/interazioni omeprazole + clopidogrel
-```
-
-Verifica se ci sono segnalazioni di eventi avversi quando i farmaci vengono usati insieme. **Questo comando sostituisce il vecchio `/informazioni` che non era affidabile.**
+**Esempio**: `/interazioni aspirin + ibuprofen`
 
 #### 📊 Statistiche Personali
-
-**1. Le Tue Statistiche**
 ```
 /mystats
 ```
+Mostra le tue statistiche: ricerche totali e farmaci più cercati.
 
-Mostra:
-- Numero totale di ricerche
-- Farmaci più cercati
-- Il tuo ID Telegram
-
-**2. Ricerche Recenti**
 ```
 /recenti
 ```
+Visualizza le ultime 10 ricerche effettuate.
 
-Mostra gli ultimi 10 farmaci che hai cercato.
-
-**3. Gestione Preferiti**
+#### ⭐ Gestione Preferiti
 ```
-/bookmarks
-/bookmarks add <farmaco>
-/bookmarks remove <farmaco>
+/bookmarks                    # Mostra lista preferiti
+/bookmarks add <nome>         # Aggiungi farmaco
+/bookmarks remove <nome>      # Rimuovi farmaco
 ```
 
-**Esempi:**
-```
-/bookmarks
-/bookmarks add aspirin
-/bookmarks remove aspirin
-```
+**Esempi**:
+- `/bookmarks add aspirin`
+- `/bookmarks`
+- `/bookmarks remove aspirin`
 
 ---
 
-## 📸 Esempi di Conversazioni
+## 💬 Esempi di Conversazione
 
 ### Esempio 1: Ricerca Farmaco
 
-**Utente:**
 ```
-/cerca ibuprofen
-```
+👤 Utente: /cerca aspirin
 
-**Bot:**
-```
-✅ 3 risultati per "ibuprofen":
+🤖 Bot:
+✅ 3 risultati per "aspirin":
 
-1. ADVIL
-   📋 Principio attivo: ibuprofen
-   🏭 Produttore: Pfizer Consumer Healthcare
+1. Aspirin
+   📋 Principio attivo: Aspirin
+   🏭 Produttore: Bayer Healthcare
    💊 Indicazioni:
-   • Relief of minor aches and pains
-   • Reduction of fever
-   • Temporary relief of minor pain of arthritis
+   • For temporary relief of minor aches and pains.
+   • Reduces risk of heart attack and stroke.
 
-[⬇️ Altri 2 risultati] [🔍 Richiami] [⭐ Salva]
+[🔍 Richiami] [⭐ Salva]
 ```
 
 ### Esempio 2: Verifica Interazioni
 
-**Utente:**
 ```
-/interazioni aspirin + ibuprofen
-```
+👤 Utente: /interazioni aspirin + warfarin
 
-**Bot:**
-```
+🤖 Bot:
 ⚠️ POSSIBILI INTERAZIONI
 
-Farmaci: aspirin + ibuprofen
+Farmaci: aspirin + warfarin
 
-📊 45 segnalazioni di eventi avversi quando 
-questi farmaci sono usati insieme.
+📊 247 segnalazioni di eventi avversi quando questi 
+farmaci sono usati insieme.
 
 🔴 Reazioni più comuni:
+• Haemorrhage
+• International normalised ratio increased
 • Gastrointestinal haemorrhage
-• Nausea
-• Vomiting
-• Abdominal pain
 
 🚨 IMPORTANTE:
 • NON interrompere i farmaci senza consultare un medico
-• Queste sono segnalazioni, non certezze scientifiche
-• Consulta un medico o farmacista per info accurate
-
-Fonte: FDA Adverse Event Reporting System (FAERS)
+• Consulta un medico o farmacista per informazioni accurate
 ```
 
-### Esempio 3: Statistiche Personali
+### Esempio 3: Sostanza Controllata
 
-**Utente:**
 ```
-/mystats
-```
+👤 Utente: /farmacolegale oxycodone
 
-**Bot:**
-```
-📊 Le tue statistiche:
+🤖 Bot:
+🚨 SOSTANZA CONTROLLATA
 
-🔍 Ricerche totali: 15
-👤 ID Telegram: 123456789
+Farmaco: oxycodone
+Classificazione: 🔴 Schedule II
 
-💊 Farmaci più cercati:
-1. aspirin (5 volte)
-2. ibuprofen (3 volte)
-3. paracetamol (2 volte)
+📋 Alto potenziale di abuso, rischio grave dipendenza
 
-💡 Usa /recenti per le ultime ricerche!
+⚠️ Richiede prescrizione speciale.
 ```
 
 ---
 
 ## 💾 Schema Database
 
-Il bot utilizza **SQLite** per memorizzare dati degli utenti e cache delle ricerche.
+Il bot utilizza **SQLite** con 4 tabelle principali:
 
-### Tabelle
-
-#### 1. **users**
+### Tabella `users`
 Memorizza informazioni sugli utenti del bot.
 
-| Campo | Tipo | Descrizione |
-|-------|------|-------------|
-| `telegram_id` | INTEGER | ID Telegram (PRIMARY KEY) |
-| `username` | TEXT | Username Telegram |
-| `search_count` | INTEGER | Numero totale ricerche |
-| `last_active` | TIMESTAMP | Ultima attività |
-| `created_at` | TIMESTAMP | Data registrazione |
+```sql
+CREATE TABLE users (
+    telegram_id INTEGER PRIMARY KEY,
+    username TEXT,
+    search_count INTEGER DEFAULT 0,
+    first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
 
-#### 2. **searches**
-Memorizza tutte le ricerche effettuate.
+**Campi**:
+- `telegram_id` - ID univoco Telegram dell'utente
+- `username` - Username Telegram
+- `search_count` - Numero totale di ricerche effettuate
+- `first_seen` - Data prima interazione
+- `last_active` - Data ultima attività
 
-| Campo | Tipo | Descrizione |
-|-------|------|-------------|
-| `id` | INTEGER | ID ricerca (AUTOINCREMENT) |
-| `telegram_id` | INTEGER | ID utente (FOREIGN KEY) |
-| `query_text` | TEXT | Testo cercato |
-| `created_at` | TIMESTAMP | Data ricerca |
+### Tabella `searches`
+Storia completa delle ricerche effettuate.
 
-#### 3. **drugs_cache**
-Cache dei farmaci per ridurre chiamate API.
+```sql
+CREATE TABLE searches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    telegram_id INTEGER NOT NULL,
+    query_text TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
+);
 
-| Campo | Tipo | Descrizione |
-|-------|------|-------------|
-| `drug_id` | TEXT | ID farmaco (PRIMARY KEY) |
-| `brand_name` | TEXT | Nome commerciale |
-| `generic_name` | TEXT | Principio attivo |
-| `manufacturer` | TEXT | Produttore |
-| `indications` | TEXT | Indicazioni terapeutiche |
-| `last_fetched` | TIMESTAMP | Ultimo aggiornamento |
+CREATE INDEX idx_searches_telegram_id ON searches(telegram_id);
+CREATE INDEX idx_searches_created_at ON searches(created_at);
+```
 
-#### 4. **bookmarks**
-Farmaci preferiti degli utenti.
+**Campi**:
+- `telegram_id` - Riferimento all'utente
+- `query_text` - Testo della ricerca
+- `created_at` - Timestamp ricerca
 
-| Campo | Tipo | Descrizione |
-|-------|------|-------------|
-| `id` | INTEGER | ID bookmark (AUTOINCREMENT) |
-| `telegram_id` | INTEGER | ID utente (FOREIGN KEY) |
-| `drug_name` | TEXT | Nome farmaco |
-| `created_at` | TIMESTAMP | Data salvataggio |
+### Tabella `drugs_cache`
+Cache delle informazioni sui farmaci per ridurre chiamate API.
 
-### Relazioni
+```sql
+CREATE TABLE drugs_cache (
+    drug_id TEXT PRIMARY KEY,
+    brand_name TEXT,
+    generic_name TEXT,
+    manufacturer TEXT,
+    indications TEXT,
+    last_fetched TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_drugs_brand ON drugs_cache(brand_name);
+CREATE INDEX idx_drugs_generic ON drugs_cache(generic_name);
+```
+
+**Campi**:
+- `drug_id` - ID univoco generato
+- `brand_name` - Nome commerciale
+- `generic_name` - Nome generico
+- `manufacturer` - Produttore
+- `indications` - Indicazioni terapeutiche
+- `last_fetched` - Data recupero da API
+
+**Cache Duration**: 24 ore
+
+### Tabella `bookmarks`
+Farmaci preferiti salvati dagli utenti.
+
+```sql
+CREATE TABLE bookmarks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    telegram_id INTEGER NOT NULL,
+    drug_name TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(telegram_id, drug_name),
+    FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
+);
+
+CREATE INDEX idx_bookmarks_telegram_id ON bookmarks(telegram_id);
+```
+
+**Campi**:
+- `telegram_id` - Riferimento all'utente
+- `drug_name` - Nome farmaco salvato
+- `created_at` - Data aggiunta
+
+### Relazioni tra Tabelle
 
 ```
 users (1) ----< (*) searches
-users (1) ----< (*) bookmarks
-```
-
-### Indici per Performance
-
-```sql
-CREATE INDEX idx_searches_telegram_id ON searches(telegram_id);
-CREATE INDEX idx_searches_created_at ON searches(created_at);
-CREATE INDEX idx_bookmarks_telegram_id ON bookmarks(telegram_id);
-CREATE INDEX idx_drugs_cache_names ON drugs_cache(brand_name, generic_name);
+  |  
+  └-----------< (*) bookmarks
 ```
 
 ---
 
-## 📊 Esempi di Query e Statistiche
+## 📊 Esempi di Query SQL
 
-### Query 1: Top 10 Farmaci Più Cercati (Globale)
-
+### Query 1: Top 10 farmaci più cercati
 ```sql
 SELECT 
     query_text, 
@@ -398,179 +376,162 @@ ORDER BY search_count DESC
 LIMIT 10;
 ```
 
-### Query 2: Utenti Più Attivi
-
+### Query 2: Utenti più attivi
 ```sql
 SELECT 
-    u.username, 
-    u.search_count, 
-    u.last_active
-FROM users u
-ORDER BY u.search_count DESC
+    username, 
+    search_count,
+    DATE(last_active) as ultima_attivita
+FROM users
+ORDER BY search_count DESC
 LIMIT 10;
 ```
 
-### Query 3: Ricerche Per Giorno
-
+### Query 3: Ricerche per giorno
 ```sql
 SELECT 
-    DATE(created_at) as date, 
-    COUNT(*) as searches
+    DATE(created_at) as data,
+    COUNT(*) as ricerche_giornaliere
 FROM searches
 GROUP BY DATE(created_at)
-ORDER BY date DESC;
+ORDER BY data DESC
+LIMIT 30;
 ```
 
-### Query 4: Farmaci Preferiti Più Salvati
-
+### Query 4: Farmaci più salvati nei preferiti
 ```sql
 SELECT 
-    drug_name, 
-    COUNT(*) as bookmark_count
+    drug_name,
+    COUNT(*) as utenti_che_lhanno_salvato
 FROM bookmarks
 GROUP BY LOWER(drug_name)
-ORDER BY bookmark_count DESC
+ORDER BY utenti_che_lhanno_salvato DESC
 LIMIT 10;
+```
+
+### Query 5: Efficacia cache
+```sql
+SELECT 
+    COUNT(*) as farmaci_in_cache,
+    COUNT(CASE WHEN last_fetched > datetime('now', '-24 hours') 
+          THEN 1 END) as cache_valida
+FROM drugs_cache;
 ```
 
 ---
 
-## 📚 Struttura del Progetto
+## 📚 Struttura Progetto
 
 ```
 FANTON_Telegram_Bot/
-├── src/
-│   └── main/
-│       └── java/
-│           └── org/
-│               └── medBot/
-│                   ├── Main.java                  # Entry point
-│                   ├── MyConfiguration.java       # Gestione config
-│                   ├── bot/
-│                   │   └── MedBot.java            # Logica principale bot
-│                   ├── dao/
-│                   │   └── DatabaseManager.java   # Gestione database
-│                   ├── model/
-│                   │   ├── Drug.java              # Modello Farmaco
-│                   │   └── Recall.java            # Modello Richiamo
-│                   ├── service/
-│                   │   └── OpenFdaService.java    # Chiamate API FDA
-│                   └── util/
-├── pom.xml                            # Dipendenze Maven
-├── config.properties                  # Configurazione (non in git)
-├── .gitignore
-└── README.md
+├── src/main/java/org/medBot/
+│   ├── bot/
+│   │   └── MedBot.java              # Bot principale (semplificato)
+│   ├── handler/                  # Handler per ogni comando
+│   │   ├── CommandHandler.java      # Interfaccia base
+│   │   ├── StartHandler.java
+│   │   ├── HelpHandler.java
+│   │   ├── SearchHandler.java
+│   │   ├── RecallsHandler.java
+│   │   ├── ControlledSubstanceHandler.java
+│   │   ├── AdverseEventsHandler.java
+│   │   ├── InteractionsHandler.java
+│   │   ├── StatsHandler.java
+│   │   ├── RecentHandler.java
+│   │   └── BookmarksHandler.java
+│   ├── service/
+│   │   └── OpenFdaService.java      # Gestione API FDA
+│   ├── dao/
+│   │   └── DatabaseManager.java     # Gestione database
+│   ├── model/
+│   │   ├── Drug.java               # Modello farmaco
+│   │   └── Recall.java             # Modello richiamo
+│   ├── util/
+│   │   └── MessageSender.java      # Utility invio messaggi
+│   └── MyConfiguration.java      # Configurazione
+├── config.properties             # Configurazione (NON su Git)
+├── pom.xml                       # Dipendenze Maven
+└── README.md                     # Questo file
 ```
 
----
+### Architettura
 
-## 📦 Dipendenze Maven
-
-Il progetto utilizza le seguenti librerie (da `pom.xml`):
-
-```xml
-<!-- Telegram Bot API -->
-<dependency>
-    <groupId>org.telegram</groupId>
-    <artifactId>telegrambots-longpolling</artifactId>
-    <version>9.2.0</version>
-</dependency>
-
-<dependency>
-    <groupId>org.telegram</groupId>
-    <artifactId>telegrambots-client</artifactId>
-    <version>9.2.0</version>
-</dependency>
-
-<!-- Database SQLite -->
-<dependency>
-    <groupId>org.xerial</groupId>
-    <artifactId>sqlite-jdbc</artifactId>
-    <version>3.47.1.0</version>
-</dependency>
-
-<!-- HTTP Client -->
-<dependency>
-    <groupId>com.squareup.okhttp3</groupId>
-    <artifactId>okhttp</artifactId>
-    <version>4.12.0</version>
-</dependency>
-
-<!-- JSON Processing -->
-<dependency>
-    <groupId>com.fasterxml.jackson.core</groupId>
-    <artifactId>jackson-databind</artifactId>
-    <version>2.18.2</version>
-</dependency>
-
-<!-- Logging -->
-<dependency>
-    <groupId>org.slf4j</groupId>
-    <artifactId>slf4j-api</artifactId>
-    <version>2.0.16</version>
-</dependency>
-
-<dependency>
-    <groupId>ch.qos.logback</groupId>
-    <artifactId>logback-classic</artifactId>
-    <version>1.5.15</version>
-</dependency>
-
-<!-- Configuration Management -->
-<dependency>
-    <groupId>org.apache.commons</groupId>
-    <artifactId>commons-configuration2</artifactId>
-    <version>2.12.0</version>
-</dependency>
-```
+1. **Handler Pattern**: Ogni comando ha il suo handler dedicato per separazione delle responsabilità
+2. **Service Layer**: `OpenFdaService` gestisce tutte le chiamate API
+3. **DAO Layer**: `DatabaseManager` gestisce accesso database
+4. **Utility Classes**: `MessageSender` centralizza invio messaggi
 
 ---
 
-## 👩‍💻 Sviluppo e Miglioramenti Futuri
+## ⚙️ Caratteristiche Tecniche
 
-### Possibili Estensioni
+### Caching Intelligente
+- Le informazioni sui farmaci vengono salvate nel database per **24 ore**
+- Riduce le chiamate API e migliora le performance
+- Cache trasparente all'utente
 
-- 🌍 Aggiungere supporto multilingua (traduzione automatica)
-- 📊 Grafici e visualizzazioni dati sulle statistiche
-- 🔔 Sistema di notifiche per nuovi richiami
-- 👥 Funzionalità social (condivisione ricerche)
-- 🤖 Suggerimenti intelligenti basati su cronologia
-- 📱 App mobile companion
+### Gestione Errori
+- Try-catch su tutte le operazioni critiche
+- Messaggi di errore user-friendly
+- Log essenziali con `System.out.println`
+
+### Paginazione
+- Risultati divisi in pagine navigabili
+- Bottoni "Altri risultati" per caricare altre pagine
+- Limite configurabile per tipo di contenuto
+
+### Sicurezza
+- Token bot in file di configurazione separato (non su Git)
+- Validazione input utente
+- Prepared statements per prevenire SQL injection
 
 ---
 
-## ⚠️ Disclaimer Importante
+## 🚧 Note Importanti
 
-**Questo bot fornisce informazioni a scopo educativo e informativo. NON sostituisce il parere di un medico o farmacista professionista.**
+⚠️ **Disclaimer Medico**
 
-- Le informazioni provengono da database pubblici FDA
-- I dati potrebbero non essere completi o aggiornati
-- In caso di dubbi medici, consulta sempre un professionista sanitario
-- Non interrompere o modificare terapie senza consulto medico
+Questo bot è **solo a scopo educativo**. Le informazioni fornite:
+- NON costituiscono consulenza medica
+- NON sostituiscono il parere di un medico
+- Provengono da database FDA che potrebbero non essere completi
+- I dati sono in **inglese** (database FDA)
+
+**Consultare sempre un professionista sanitario qualificato.**
+
+🇺🇸 **Lingua dei Dati**
+
+I dati provengono dalla FDA americana, quindi:
+- Cercare farmaci con **nomi inglesi** (es. "aspirin" non "aspirina")
+- Risultati e descrizioni sono in **inglese**
+- Alcuni farmaci potrebbero non essere disponibili in Italia
+
+---
+
+## 👩‍💻 Autore
+
+**Fanton Lucrezia**  
+Progetto scolastico - TPSIT - 5° Superiore
+
+GitHub: [@Fanton-Lucrezia](https://github.com/Fanton-Lucrezia)
 
 ---
 
 ## 📜 Licenza
 
-Questo progetto è stato sviluppato per scopi educativi come progetto scolastico per la materia TPSIT.
-
----
-
-## 👤 Autore
-
-**Lucrezia Fanton**
-- GitHub: [@Fanton-Lucrezia](https://github.com/Fanton-Lucrezia)
-- Progetto: TPSIT 5° Superiore
+Progetto educativo per scopi didattici.
 
 ---
 
 ## 🔗 Link Utili
 
-- [OpenFDA API Documentation](https://open.fda.gov/apis/)
+- [OpenFDA Documentation](https://open.fda.gov/apis/)
 - [Telegram Bot API](https://core.telegram.org/bots/api)
-- [SQLite Documentation](https://www.sqlite.org/docs.html)
-- [Maven Guide](https://maven.apache.org/guides/)
+- [TelegramBots Java Library](https://github.com/rubenlagus/TelegramBots)
+- [FDA Drug Information](https://www.fda.gov/drugs)
 
 ---
 
-**Buon utilizzo! 💊🤖**
+<p align="center">
+  <i>Made with ❤️ for educational purposes</i>
+</p>

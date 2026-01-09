@@ -208,28 +208,27 @@ public class OpenFdaService {
 
     /**
      * Verifica se un farmaco è una sostanza controllata.
-     * FIX: Usa l'approccio corretto cercando nell'NDC directory e poi verifica schedule.
+     * FIX: Cerca in modo più ampio e controlla tutti i risultati.
      */
     public String checkDrugSchedule(String drugName) throws IOException {
         System.out.println("Verifica sostanza controllata: " + drugName);
         
-        //Prima cerca il farmaco nell'endpoint label con il campo dea_schedule
         String encodedTerm = URLEncoder.encode(drugName, StandardCharsets.UTF_8);
         
-        //Prova diverse query per trovare il farmaco
+        //Prova diverse strategie di ricerca
         String[] queries = {
-            //Query 1: Cerca con brand name o generic name E controlla se esiste dea_schedule
+            //Query 1: Cerca con brand o generic name (ampia)
             String.format("(openfda.brand_name:\"%s\"+OR+openfda.generic_name:\"%s\")", 
                 encodedTerm, encodedTerm),
-            //Query 2: Cerca solo per generic name
+            //Query 2: Cerca solo per generic name (più specifica)
             String.format("openfda.generic_name:\"%s\"", encodedTerm),
-            //Query 3: Cerca solo per brand name  
-            String.format("openfda.brand_name:\"%s\"", encodedTerm)
+            //Query 3: Cerca senza openfda (cerca direttamente nel testo)
+            String.format("\"%s\"", encodedTerm)
         };
         
-        for (String query : queries) {
-            String url = String.format("%s/drug/label.json?search=%s&limit=5", FDA_BASE_URL, query);
-            System.out.println("Tentativo query: " + url);
+        for (int attempt = 0; attempt < queries.length; attempt++) {
+            String url = String.format("%s/drug/label.json?search=%s&limit=10", FDA_BASE_URL, queries[attempt]);
+            System.out.println("Tentativo " + (attempt + 1) + ": " + url);
             
             Request request = new Request.Builder()
                     .url(url)
@@ -243,7 +242,7 @@ public class OpenFdaService {
 
                     JsonNode results = root.get("results");
                     if (results != null && results.isArray() && results.size() > 0) {
-                        //Cerca in tutti i risultati se c'è un dea_schedule
+                        //Cerca in TUTTI i risultati se c'è un dea_schedule
                         for (JsonNode result : results) {
                             JsonNode openfda = result.get("openfda");
                             if (openfda != null && openfda.has("dea_schedule")) {
@@ -251,8 +250,8 @@ public class OpenFdaService {
                                 if (schedules.isArray() && schedules.size() > 0) {
                                     String schedule = schedules.get(0).asText();
                                     //Rimuove il prefisso "C" se presente (es. "CII" -> "II")
-                                    schedule = schedule.replaceAll("^C", "");
-                                    System.out.println("Trovato Schedule: " + schedule);
+                                    schedule = schedule.replaceAll("^C", "").replaceAll("^IV$|^V$|^III$|^II$|^I$", "$0");
+                                    System.out.println("✅ Trovato Schedule: " + schedule);
                                     return schedule;
                                 }
                             }
@@ -260,11 +259,11 @@ public class OpenFdaService {
                     }
                 }
             } catch (Exception e) {
-                System.out.println("Errore query: " + e.getMessage());
+                System.out.println("❌ Errore query: " + e.getMessage());
             }
         }
         
-        System.out.println("Nessun schedule trovato");
+        System.out.println("❌ Nessun schedule trovato");
         return null;
     }
 

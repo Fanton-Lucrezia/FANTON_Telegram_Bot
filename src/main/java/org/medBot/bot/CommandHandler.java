@@ -58,7 +58,7 @@ public class CommandHandler {
                 "/cerca &lt;nome&gt; - Cerca un farmaco\n" +
                 "Esempio: <code>/cerca aspirin</code>\n\n" +
                 "<b>⚠️ Sicurezza</b>\n" +
-                "/richiami &lt;nome|all&gt; - Controlla richiami FDA\n" +
+                "/richiami &lt;nome|all&gt; - Controlla richiami che sono stati ritirati dal mercato per problemi di qualità, sicurezza o efficacia, per proteggere la salute pubblica\n" +
                 "/farmacolegale &lt;nome&gt; - Verifica se è sostanza controllata\n" +
                 "/effetticollaterali &lt;nome&gt; - Effetti collaterali segnalati\n" +
                 "/interazioni &lt;farmaco1 + farmaco2&gt; - Verifica interazioni\n\n" +

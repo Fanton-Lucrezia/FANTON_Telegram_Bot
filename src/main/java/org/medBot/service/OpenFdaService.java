@@ -42,19 +42,10 @@ public class OpenFdaService {
         this.dbManager = DatabaseManager.getInstance();
     }
 
-    /*Cerca farmaci per nome utilizzando prima la cache del database
-    Se non trova nulla in cache, chiama l'API OpenFDA*/
+    /*Cerca farmaci per nome chiamando sempre l'API OpenFDA
+    Non usa cache per le ricerche perché deve restituire TUTTI i risultati trovati*/
     public List<Drug> searchDrug(String searchTerm) throws IOException {
-        System.out.println("Ricerca farmaco: " + searchTerm);
-
-        //Prima controlla se il farmaco è in cache (evita chiamate API inutili)
-        Drug cached = getCachedDrug(searchTerm);
-        if (cached != null) {
-            System.out.println("Cache HIT");
-            return List.of(cached);
-        }
-
-        System.out.println("Cache MISS, chiamata API");
+        System.out.println("🔍 Ricerca farmaco: " + searchTerm);
 
         //Codifica il termine di ricerca per URL (es. spazi diventano %20)
         String encodedTerm = URLEncoder.encode(searchTerm, StandardCharsets.UTF_8);
@@ -63,8 +54,8 @@ public class OpenFdaService {
                 "(openfda.brand_name:\"%s\"+OR+openfda.generic_name:\"%s\")",
                 encodedTerm, encodedTerm);
 
-        //URL completo con query e limite di 10 risultati
-        String url = String.format("%s/drug/label.json?search=%s&limit=10", FDA_BASE_URL, query);
+        //URL completo con query e limite di 100 risultati per avere tutti i farmaci disponibili
+        String url = String.format("%s/drug/label.json?search=%s&limit=100", FDA_BASE_URL, query);
 
         //Costruisce la richiesta HTTP con header User-Agent personalizzato
         Request request = new Request.Builder()
@@ -77,7 +68,8 @@ public class OpenFdaService {
             //Controlla se la richiesta è andata a buon fine
             if (!response.isSuccessful()) {
                 if (response.code() == 404) {
-                    throw new IOException("404 - Farmaco non trovato");
+                    System.out.println("❌ 404 - Nessun risultato trovato");
+                    return new ArrayList<>();
                 }
                 throw new IOException("Errore API FDA: " + response.code());
             }
@@ -89,11 +81,8 @@ public class OpenFdaService {
 
             //Converte i risultati JSON in oggetti Drug
             List<Drug> drugs = parseDrugResults(root);
-
-            //Salva il primo risultato in cache per riutilizzarlo in futuro
-            if (!drugs.isEmpty()) {
-                saveDrugToCache(drugs.get(0));
-            }
+            
+            System.out.println("✅ Trovati " + drugs.size() + " risultati");
 
             return drugs;
         }
@@ -499,81 +488,5 @@ public class OpenFdaService {
         result.put("commonReactions", commonReactions);
 
         return result;
-    }
-
-    //==================== METODI DI GESTIONE CACHE ====================
-
-    /*Cerca un farmaco nella cache del database
-    Restituisce il farmaco se trovato e non più vecchio di CACHE_HOURS ore*/
-    private Drug getCachedDrug(String searchTerm) {
-        try (Connection conn = dbManager.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(
-                     "SELECT * FROM drugs_cache " +
-                             "WHERE (LOWER(brand_name) LIKE LOWER(?) OR LOWER(generic_name) LIKE LOWER(?)) " +
-                             "AND last_fetched > datetime('now', '-' || ? || ' hours') " +
-                             "ORDER BY last_fetched DESC LIMIT 1")) {
-
-            //Usa LIKE con % per match parziali (es. "aspir" trova "aspirin")
-            String pattern = "%" + searchTerm + "%";
-            pstmt.setString(1, pattern);
-            pstmt.setString(2, pattern);
-            pstmt.setInt(3, CACHE_HOURS);
-
-            ResultSet rs = pstmt.executeQuery();
-
-            //Se trova un risultato valido, costruisce l'oggetto Drug dalla cache
-            if (rs.next()) {
-                Drug drug = new Drug();
-                drug.setDrugId(rs.getString("drug_id"));
-                drug.setBrandName(rs.getString("brand_name"));
-                drug.setGenericName(rs.getString("generic_name"));
-                drug.setManufacturer(rs.getString("manufacturer"));
-                drug.setIndications(rs.getString("indications"));
-                return drug;
-            }
-
-        } catch (Exception e) {
-            System.out.println("Errore cache: " + e.getMessage());
-        }
-
-        return null;
-    }
-
-    /*Salva un farmaco nella cache del database per riutilizzarlo in futuro
-    INSERT OR REPLACE aggiorna se già esiste, altrimenti inserisce nuovo*/
-    private void saveDrugToCache(Drug drug) {
-        try (Connection conn = dbManager.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(
-                     "INSERT OR REPLACE INTO drugs_cache (drug_id, brand_name, generic_name, manufacturer, indications, last_fetched) " +
-                             "VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)")) {
-
-            //Genera un ID univoco per il farmaco
-            String drugId = generateDrugId(drug);
-            drug.setDrugId(drugId);
-
-            pstmt.setString(1, drugId);
-            pstmt.setString(2, drug.getBrandName());
-            pstmt.setString(3, drug.getGenericName());
-            pstmt.setString(4, drug.getManufacturer());
-            pstmt.setString(5, drug.getIndications());
-
-            pstmt.executeUpdate();
-
-        } catch (Exception e) {
-            System.out.println("Errore salvataggio cache: " + e.getMessage());
-        }
-    }
-
-    /*Genera un ID univoco per il farmaco combinando nome e timestamp
-    Questo garantisce che ogni farmaco abbia un identificatore unico nel database*/
-    private String generateDrugId(Drug drug) {
-        //Usa il brand name se disponibile, altrimenti il generic name
-        String name = drug.getBrandName() != null ? drug.getBrandName() : drug.getGenericName();
-        if (name == null) name = "unknown";
-
-        //Normalizza il nome: lowercase e rimuove caratteri speciali
-        String normalized = name.toLowerCase().replaceAll("[^a-z0-9]", "-");
-        //Aggiunge il timestamp per garantire unicità
-        return normalized + "-" + System.currentTimeMillis();
     }
 }

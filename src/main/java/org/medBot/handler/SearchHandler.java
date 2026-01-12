@@ -73,6 +73,7 @@ public class SearchHandler implements CommandHandler {
                 
                 //Salva i risultati in cache per la paginazione
                 searchCache.put(chatId, drugs);
+                System.out.println("✅ Salvati " + drugs.size() + " risultati in cache per chatId " + chatId);
                 
             } catch (Exception e) {
                 System.out.println("Errore ricerca: " + e.getMessage());
@@ -88,11 +89,15 @@ public class SearchHandler implements CommandHandler {
                 messageSender.sendMessage(chatId, "❌ Risultati scaduti. Riprova la ricerca con <code>/cerca " + drugName + "</code>");
                 return;
             }
+            
+            System.out.println("📋 Recuperati " + drugs.size() + " risultati dalla cache per offset " + offset);
         }
 
-        //Paginazione: mostra 3 risultati per volta
-        int pageSize = 3;
+        //Paginazione: mostra 5 risultati per volta
+        int pageSize = 5;
         int end = Math.min(offset + pageSize, drugs.size());
+        
+        System.out.println("📊 Mostrando risultati da " + offset + " a " + end + " (totali: " + drugs.size() + ")");
 
         //Costruisce la risposta formattata
         StringBuilder response = new StringBuilder();

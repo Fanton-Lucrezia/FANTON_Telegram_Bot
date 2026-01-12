@@ -95,7 +95,7 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
                 if (args.isEmpty()) {
                     waitingForInput.put(chatId, "cerca");
                     messageSender.sendMessage(chatId, "📝 <b>Inserisci il nome del farmaco da cercare:</b>\n\n" +
-                            "💡 Esempio: aspirin, ibuprofen, paracetamol");
+                            "💡 Esempio: aspirin, ibuprofen");
                 } else {
                     commandHandler.handleSearchDrug(chatId, args, 0);
                 }
@@ -136,6 +136,7 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
             case "/mystats" -> commandHandler.handleMyStats(chatId);
             case "/recenti" -> commandHandler.handleRecentSearches(chatId);
             case "/bookmarks" -> commandHandler.handleBookmarks(chatId, args);
+            case "/statistiche" -> commandHandler.handleGlobalStats(chatId);
             
             default -> messageSender.sendMessage(chatId, "❓ Comando sconosciuto. Usa /help");
         }
@@ -146,6 +147,23 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
         long chatId = update.getCallbackQuery().getMessage().getChatId();
         int messageId = update.getCallbackQuery().getMessage().getMessageId();
 
+        //Gestisce il caso "already_saved" senza rimuovere i bottoni
+        if (callbackData.equals("already_saved")) {
+            //Non fa nulla, il bottone è già disabilitato visivamente
+            try {
+                telegramClient.execute(
+                    org.telegram.telegrambots.meta.api.methods.answerCallbackQuery.AnswerCallbackQuery.builder()
+                        .callbackQueryId(update.getCallbackQuery().getId())
+                        .text("ℹ️ Già nei preferiti")
+                        .showAlert(false)
+                        .build());
+            } catch (TelegramApiException e) {
+                //Ignora errori
+            }
+            return;
+        }
+
+        //Per altri callback, rimuove la tastiera
         try {
             telegramClient.execute(
                     org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup.builder()
@@ -168,7 +186,6 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
             commandHandler.handleSearchDrug(chatId, parts[1], Integer.parseInt(parts[2]));
         } else if (callbackData.startsWith("bookmark:")) {
             String drugName = callbackData.substring(9);
-            //Salva e mostra messaggio con bottone richiami
             commandHandler.handleBookmarkAdd(chatId, drugName);
         }
     }

@@ -55,7 +55,8 @@ public class CommandHandler {
                 "/effetticollaterali &lt;nome&gt; - Effetti collaterali segnalati\n" +
                 "/interazioni &lt;farmaco1 + farmaco2&gt; - Verifica interazioni\n\n" +
                 "<b>📊 Statistiche</b>\n" +
-                "/mystats - Le tue statistiche\n" +
+                "/mystats - Le tue statistiche personali\n" +
+                "/statistiche - Statistiche globali del bot\n" +
                 "/recenti - Farmaci cercati di recente\n" +
                 "/bookmarks - Gestisci i preferiti\n\n" +
                 "<b>💡 Suggerimento:</b>\n" +
@@ -205,7 +206,7 @@ public class CommandHandler {
 
         } catch (Exception e) {
             System.out.println("Errore richiami: " + e.getMessage());
-            messageSender.sendMessage(chatId, "❌ Errore durante la ricerca richiami.");
+            messageSender.sendMessage(chatId, "❌ Errore durante la ricerca richiami. Riprova.");
         }
     }
 
@@ -332,6 +333,19 @@ public class CommandHandler {
         }
     }
 
+    /**
+     * Gestisce il comando /statistiche per mostrare statistiche globali del bot.
+     */
+    public void handleGlobalStats(long chatId) {
+        try {
+            String stats = statsService.getGlobalStats();
+            messageSender.sendMessage(chatId, stats);
+        } catch (Exception e) {
+            System.out.println("Errore statistiche globali: " + e.getMessage());
+            messageSender.sendMessage(chatId, "❌ Errore nel recuperare le statistiche.");
+        }
+    }
+
     public void handleRecentSearches(long chatId) {
         try {
             String recent = statsService.getRecentSearches(chatId);
@@ -344,14 +358,12 @@ public class CommandHandler {
 
     /**
      * Gestisce l'aggiunta di un bookmark tramite bottone inline.
-     * Mantiene il bottone richiami dopo il salvataggio.
      */
     public void handleBookmarkAdd(long chatId, String drugName) {
         try {
             boolean alreadySaved = bookmarkService.isBookmarked(chatId, drugName);
             
             if (alreadySaved) {
-                //Crea bottone richiami
                 InlineKeyboardButton recallsButton = InlineKeyboardButton.builder()
                         .text("🔍 Controlla richiami")
                         .callbackData("recalls:" + drugName)
@@ -366,7 +378,6 @@ public class CommandHandler {
             } else {
                 bookmarkService.addBookmark(chatId, drugName);
                 
-                //Crea bottone richiami
                 InlineKeyboardButton recallsButton = InlineKeyboardButton.builder()
                         .text("🔍 Controlla richiami")
                         .callbackData("recalls:" + drugName)

@@ -75,7 +75,6 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
         switch (pendingCommand) {
             case "cerca" -> commandHandler.handleSearchDrug(chatId, input, 0);
             case "richiami" -> commandHandler.handleRecalls(chatId, input, 0);
-            case "farmacolegale" -> commandHandler.handleControlledSubstance(chatId, input);
             case "effetticollaterali" -> commandHandler.handleAdverseEvents(chatId, input);
             case "interazioni" -> commandHandler.handleDrugInteractions(chatId, input);
             case "bookmarks_add" -> commandHandler.handleBookmarks(chatId, "add " + input);
@@ -111,17 +110,6 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
                             "• all (per tutti gli ultimi richiami)");
                 } else {
                     commandHandler.handleRecalls(chatId, args, 0);
-                }
-            }
-            
-            case "/farmacolegale" -> {
-                if (args.isEmpty()) {
-                    waitingForInput.put(chatId, "farmacolegale");
-                    messageSender.sendMessage(chatId, "📝 <b>Inserisci il nome del farmaco:</b>\n\n" +
-                            "💡 Esempi: oxycodone, alprazolam, tramadol\n\n" +
-                            "<i>Verifica se è una sostanza controllata.</i>");
-                } else {
-                    commandHandler.handleControlledSubstance(chatId, args);
                 }
             }
             
@@ -180,7 +168,8 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
             commandHandler.handleSearchDrug(chatId, parts[1], Integer.parseInt(parts[2]));
         } else if (callbackData.startsWith("bookmark:")) {
             String drugName = callbackData.substring(9);
-            commandHandler.handleBookmarks(chatId, "add " + drugName);
+            //Salva e mostra messaggio con bottone richiami
+            commandHandler.handleBookmarkAdd(chatId, drugName);
         }
     }
 

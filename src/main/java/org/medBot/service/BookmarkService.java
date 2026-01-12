@@ -10,13 +10,26 @@ import java.util.List;
 
 /**
  * Gestisce i bookmark (preferiti) degli utenti.
- * Separa la logica dei bookmark dal resto del codice.
  */
 public class BookmarkService {
     private final DatabaseManager dbManager;
 
     public BookmarkService() {
         this.dbManager = DatabaseManager.getInstance();
+    }
+
+    /**
+     * Verifica se un farmaco è già nei preferiti.
+     */
+    public boolean isBookmarked(long chatId, String drugName) throws Exception {
+        try (Connection conn = dbManager.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "SELECT COUNT(*) FROM bookmarks WHERE telegram_id = ? AND LOWER(drug_name) = LOWER(?)")) {
+            pstmt.setLong(1, chatId);
+            pstmt.setString(2, drugName);
+            ResultSet rs = pstmt.executeQuery();
+            return rs.next() && rs.getInt(1) > 0;
+        }
     }
 
     /**
@@ -38,7 +51,7 @@ public class BookmarkService {
     public void removeBookmark(long chatId, String drugName) throws Exception {
         try (Connection conn = dbManager.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(
-                     "DELETE FROM bookmarks WHERE telegram_id = ? AND drug_name = ?")) {
+                     "DELETE FROM bookmarks WHERE telegram_id = ? AND LOWER(drug_name) = LOWER(?)")) {
             pstmt.setLong(1, chatId);
             pstmt.setString(2, drugName);
             pstmt.executeUpdate();

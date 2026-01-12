@@ -31,9 +31,6 @@ public class CommandHandler {
         this.bookmarkService = new BookmarkService();
     }
 
-    /**
-     * Gestisce il comando /start
-     */
     public void handleStart(long chatId, String username) {
         String welcome = String.format(
                 "👋 Benvenuto <b>%s</b> su MedBot!\n\n" +
@@ -46,9 +43,6 @@ public class CommandHandler {
         messageSender.sendMessage(chatId, welcome + DISCLAIMER);
     }
 
-    /**
-     * Gestisce il comando /help
-     */
     public void handleHelp(long chatId) {
         String help = "<b>📋 Comandi Disponibili</b>\n\n" +
                 "/start - Messaggio di benvenuto\n" +
@@ -57,8 +51,7 @@ public class CommandHandler {
                 "/cerca &lt;nome&gt; - Cerca un farmaco\n" +
                 "Esempio: <code>/cerca aspirin</code>\n\n" +
                 "<b>⚠️ Sicurezza</b>\n" +
-                "/richiami &lt;nome|all&gt; - Controlla richiami FDA\n" +
-                "/farmacolegale &lt;nome&gt; - Verifica se è sostanza controllata\n" +
+                "/richiami &lt;nome|all&gt; - Controlla modifiche ai farmaci per problemi di sicurezza o efficacia\n" +
                 "/effetticollaterali &lt;nome&gt; - Effetti collaterali segnalati\n" +
                 "/interazioni &lt;farmaco1 + farmaco2&gt; - Verifica interazioni\n\n" +
                 "<b>📊 Statistiche</b>\n" +
@@ -71,17 +64,21 @@ public class CommandHandler {
         messageSender.sendMessage(chatId, help);
     }
 
-    /**
-     * Gestisce il comando /cerca
-     */
     public void handleSearchDrug(long chatId, String drugName, int offset) {
-        if (drugName.isEmpty()) {
-            messageSender.sendMessage(chatId, "❌ Specifica il nome del farmaco!\n\n" +
-                    "📝 Esempio: <code>/cerca aspirin</code>");
+        //Validazione input
+        if (drugName.isEmpty() || drugName.length() < 2) {
+            messageSender.sendMessage(chatId, "❌ Nome farmaco non valido.\n\n" +
+                    "📝 Esempio corretto: <code>/cerca aspirin</code>");
             return;
         }
 
-        //Registra la ricerca solo alla prima pagina
+        //Controlla se ci sono caratteri strani o multipli farmaci
+        if (drugName.contains(",") || drugName.contains(";")) {
+            messageSender.sendMessage(chatId, "❌ Specifica un solo farmaco per volta.\n\n" +
+                    "📝 Esempio corretto: <code>/cerca aspirin</code>");
+            return;
+        }
+
         if (offset == 0) {
             messageSender.sendMessage(chatId, "🔍 Cerco \"" + drugName + "\"...");
             statsService.recordSearch(chatId, drugName);
@@ -96,7 +93,6 @@ public class CommandHandler {
                 return;
             }
 
-            //Paginazione: 3 risultati per pagina
             int pageSize = 3;
             int end = Math.min(offset + pageSize, drugs.size());
 
@@ -104,16 +100,13 @@ public class CommandHandler {
             response.append(String.format("✅ <b>%d risultati</b> per \"%s\":\n\n",
                     drugs.size(), drugName));
 
-            //Formatta ogni farmaco
             for (int i = offset; i < end; i++) {
                 response.append(formatDrugInfo(drugs.get(i), i + 1));
                 if (i < end - 1) response.append("\n➖➖➖\n\n");
             }
 
-            //Crea tastiera con bottoni
             List<InlineKeyboardRow> rows = new ArrayList<>();
 
-            //Bottone per altri risultati
             if (end < drugs.size()) {
                 InlineKeyboardButton moreButton = InlineKeyboardButton.builder()
                         .text(String.format("⬇️ Altri %d risultati", drugs.size() - end))
@@ -122,16 +115,24 @@ public class CommandHandler {
                 rows.add(new InlineKeyboardRow(moreButton));
             }
 
-            //Bottoni azioni
             InlineKeyboardRow actionsRow = new InlineKeyboardRow();
             actionsRow.add(InlineKeyboardButton.builder()
                     .text("🔍 Richiami")
                     .callbackData("recalls:" + drugName)
                     .build());
-            actionsRow.add(InlineKeyboardButton.builder()
-                    .text("⭐ Salva")
-                    .callbackData("bookmark:" + drugName)
-                    .build());
+            
+            //Controlla se è già salvato
+            if (bookmarkService.isBookmarked(chatId, drugName)) {
+                actionsRow.add(InlineKeyboardButton.builder()
+                        .text("✅ Già salvato")
+                        .callbackData("already_saved")
+                        .build());
+            } else {
+                actionsRow.add(InlineKeyboardButton.builder()
+                        .text("⭐ Salva")
+                        .callbackData("bookmark:" + drugName)
+                        .build());
+            }
             rows.add(actionsRow);
 
             InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
@@ -146,13 +147,11 @@ public class CommandHandler {
         }
     }
 
-    /**
-     * Gestisce il comando /richiami
-     */
     public void handleRecalls(long chatId, String drugName, int offset) {
+        //Validazione input
         if (drugName.isEmpty()) {
             messageSender.sendMessage(chatId, "❌ Specifica il nome del farmaco o 'all'.\n\n" +
-                    "📝 Esempio: <code>/richiami aspirin</code>");
+                    "📝 Esempio corretto: <code>/richiami aspirin</code>");
             return;
         }
 
@@ -171,7 +170,6 @@ public class CommandHandler {
                 return;
             }
 
-            //Paginazione: 5 richiami per pagina
             int pageSize = 5;
             int end = Math.min(offset + pageSize, recalls.size());
 
@@ -190,7 +188,6 @@ public class CommandHandler {
                 if (i < end - 1) response.append("\n➖➖➖\n\n");
             }
 
-            //Bottone per altri richiami
             if (end < recalls.size()) {
                 InlineKeyboardButton button = InlineKeyboardButton.builder()
                         .text(String.format("📋 Altri %d richiami", recalls.size() - end))
@@ -212,51 +209,19 @@ public class CommandHandler {
         }
     }
 
-    /**
-     * Gestisce il comando /farmacolegale
-     */
-    public void handleControlledSubstance(long chatId, String drugName) {
-        if (drugName.isEmpty()) {
-            messageSender.sendMessage(chatId, "❌ Specifica il nome del farmaco!\n\n" +
-                    "📝 Esempio: <code>/farmacolegale oxycodone</code>\n\n" +
-                    "💡 Verifica se è una sostanza controllata (rischio dipendenza).");
+    public void handleAdverseEvents(long chatId, String drugName) {
+        //Validazione input: solo un farmaco
+        if (drugName.isEmpty() || drugName.length() < 2) {
+            messageSender.sendMessage(chatId, "❌ Nome farmaco non valido.\n\n" +
+                    "📝 Esempio corretto: <code>/effetticollaterali aspirin</code>");
             return;
         }
 
-        messageSender.sendMessage(chatId, "🔍 Verifico \"" + drugName + "\"...");
-
-        try {
-            String schedule = fdaService.checkDrugSchedule(drugName);
-
-            if (schedule == null) {
-                messageSender.sendMessage(chatId, "✅ \"" + drugName + "\" NON è una sostanza controllata.\n\n" +
-                        "Basso rischio di abuso/dipendenza.");
-            } else {
-                String emoji = getScheduleEmoji(schedule);
-                String description = getScheduleDescription(schedule);
-
-                messageSender.sendMessage(chatId, String.format(
-                        "🚨 <b>SOSTANZA CONTROLLATA</b>\n\n" +
-                                "Farmaco: <b>%s</b>\n" +
-                                "Classificazione: %s <b>Schedule %s</b>\n\n" +
-                                "📋 %s\n\n" +
-                                "⚠️ Richiede prescrizione speciale.",
-                        drugName, emoji, schedule, description));
-            }
-
-        } catch (Exception e) {
-            System.out.println("Errore verifica sostanza: " + e.getMessage());
-            messageSender.sendMessage(chatId, "❌ Errore durante la verifica.");
-        }
-    }
-
-    /**
-     * Gestisce il comando /effetticollaterali
-     */
-    public void handleAdverseEvents(long chatId, String drugName) {
-        if (drugName.isEmpty()) {
-            messageSender.sendMessage(chatId, "❌ Specifica il nome del farmaco!\n\n" +
-                    "📝 Esempio: <code>/effetticollaterali aspirin</code>");
+        //Controlla se ci sono più farmaci
+        if (drugName.contains(",") || drugName.contains("+") || drugName.contains(";")) {
+            messageSender.sendMessage(chatId, "❌ Specifica un solo farmaco per volta.\n\n" +
+                    "📝 Esempio corretto: <code>/effetticollaterali aspirin</code>\n\n" +
+                    "💡 Per interazioni tra farmaci usa: <code>/interazioni farmaco1 + farmaco2</code>");
             return;
         }
 
@@ -297,25 +262,29 @@ public class CommandHandler {
         }
     }
 
-    /**
-     * Gestisce il comando /interazioni
-     */
     public void handleDrugInteractions(long chatId, String args) {
+        //Validazione input
         if (args.isEmpty()) {
             messageSender.sendMessage(chatId, "❌ Specifica i farmaci separati da +\n\n" +
-                    "📝 Esempio: <code>/interazioni aspirin + ibuprofen</code>");
+                    "📝 Esempio corretto: <code>/interazioni aspirin + ibuprofen</code>");
             return;
         }
 
         String[] drugs = args.split("\\+");
         if (drugs.length < 2) {
-            messageSender.sendMessage(chatId, "❌ Specifica almeno due farmaci separati da +");
+            messageSender.sendMessage(chatId, "❌ Specifica almeno due farmaci separati da +\n\n" +
+                    "📝 Esempio corretto: <code>/interazioni aspirin + ibuprofen</code>");
             return;
         }
 
-        //Pulisce i nomi
+        //Pulisce e valida i nomi
         for (int i = 0; i < drugs.length; i++) {
             drugs[i] = drugs[i].trim();
+            if (drugs[i].isEmpty() || drugs[i].length() < 2) {
+                messageSender.sendMessage(chatId, "❌ Uno o più nomi di farmaci non sono validi.\n\n" +
+                        "📝 Esempio corretto: <code>/interazioni aspirin + ibuprofen</code>");
+                return;
+            }
         }
 
         messageSender.sendMessage(chatId, "🔍 Verifico interazioni...");
@@ -353,9 +322,6 @@ public class CommandHandler {
         }
     }
 
-    /**
-     * Gestisce il comando /mystats
-     */
     public void handleMyStats(long chatId) {
         try {
             String stats = statsService.getUserStats(chatId);
@@ -366,9 +332,6 @@ public class CommandHandler {
         }
     }
 
-    /**
-     * Gestisce il comando /recenti
-     */
     public void handleRecentSearches(long chatId) {
         try {
             String recent = statsService.getRecentSearches(chatId);
@@ -380,8 +343,47 @@ public class CommandHandler {
     }
 
     /**
-     * Gestisce il comando /bookmarks
+     * Gestisce l'aggiunta di un bookmark tramite bottone inline.
+     * Mantiene il bottone richiami dopo il salvataggio.
      */
+    public void handleBookmarkAdd(long chatId, String drugName) {
+        try {
+            boolean alreadySaved = bookmarkService.isBookmarked(chatId, drugName);
+            
+            if (alreadySaved) {
+                //Crea bottone richiami
+                InlineKeyboardButton recallsButton = InlineKeyboardButton.builder()
+                        .text("🔍 Controlla richiami")
+                        .callbackData("recalls:" + drugName)
+                        .build();
+                
+                InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
+                        .keyboardRow(new InlineKeyboardRow(recallsButton))
+                        .build();
+                
+                messageSender.sendMessageWithKeyboard(chatId, 
+                        "ℹ️ <b>\"" + drugName + "\"</b> è già nei tuoi preferiti!", keyboard);
+            } else {
+                bookmarkService.addBookmark(chatId, drugName);
+                
+                //Crea bottone richiami
+                InlineKeyboardButton recallsButton = InlineKeyboardButton.builder()
+                        .text("🔍 Controlla richiami")
+                        .callbackData("recalls:" + drugName)
+                        .build();
+                
+                InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
+                        .keyboardRow(new InlineKeyboardRow(recallsButton))
+                        .build();
+                
+                messageSender.sendMessageWithKeyboard(chatId, "⭐ Farmaco salvato!", keyboard);
+            }
+        } catch (Exception e) {
+            System.out.println("Errore bookmark: " + e.getMessage());
+            messageSender.sendMessage(chatId, "❌ Errore nel salvare il farmaco.");
+        }
+    }
+
     public void handleBookmarks(long chatId, String args) {
         String[] parts = args.split("\\s+", 2);
         String action = parts.length > 0 ? parts[0].toLowerCase() : "";
@@ -390,29 +392,43 @@ public class CommandHandler {
         try {
             switch (action) {
                 case "add" -> {
-                    if (drugName.isEmpty()) {
-                        messageSender.sendMessage(chatId, "❌ Specifica il farmaco!\n" +
-                                "Esempio: <code>/bookmarks add aspirin</code>");
+                    if (drugName.isEmpty() || drugName.length() < 2) {
+                        messageSender.sendMessage(chatId, "❌ Nome farmaco non valido!\n\n" +
+                                "📝 Esempio corretto: <code>/bookmarks add aspirin</code>");
                         return;
                     }
-                    bookmarkService.addBookmark(chatId, drugName);
-                    messageSender.sendMessage(chatId, "⭐ Farmaco salvato!");
+                    
+                    boolean alreadySaved = bookmarkService.isBookmarked(chatId, drugName);
+                    if (alreadySaved) {
+                        messageSender.sendMessage(chatId, "ℹ️ <b>\"" + drugName + "\"</b> è già nei tuoi preferiti!");
+                    } else {
+                        bookmarkService.addBookmark(chatId, drugName);
+                        messageSender.sendMessage(chatId, "⭐ Farmaco salvato!");
+                    }
                 }
                 case "remove" -> {
                     if (drugName.isEmpty()) {
-                        messageSender.sendMessage(chatId, "❌ Specifica il farmaco!\n" +
-                                "Esempio: <code>/bookmarks remove aspirin</code>");
+                        messageSender.sendMessage(chatId, "❌ Specifica il farmaco da rimuovere!\n\n" +
+                                "📝 Esempio corretto: <code>/bookmarks remove aspirin</code>");
                         return;
                     }
-                    bookmarkService.removeBookmark(chatId, drugName);
-                    messageSender.sendMessage(chatId, "🗑️ Farmaco rimosso.");
+                    
+                    boolean wasBookmarked = bookmarkService.isBookmarked(chatId, drugName);
+                    if (!wasBookmarked) {
+                        messageSender.sendMessage(chatId, "❌ <b>\"" + drugName + "\"</b> non è nei tuoi preferiti.\n\n" +
+                                "💡 Usa <code>/bookmarks</code> per vedere la lista.");
+                    } else {
+                        bookmarkService.removeBookmark(chatId, drugName);
+                        messageSender.sendMessage(chatId, "🗑️ Farmaco rimosso dai preferiti.");
+                    }
                 }
                 case "list", "" -> {
                     String bookmarks = bookmarkService.getBookmarks(chatId);
                     messageSender.sendMessage(chatId, bookmarks);
                 }
                 default -> messageSender.sendMessage(chatId, "❌ Azione non valida.\n\n" +
-                        "Usa: <code>/bookmarks</code>, <code>/bookmarks add &lt;nome&gt;</code>");
+                        "📝 Usa: <code>/bookmarks</code>, <code>/bookmarks add &lt;nome&gt;</code>, " +
+                        "<code>/bookmarks remove &lt;nome&gt;</code>");
             }
         } catch (Exception e) {
             System.out.println("Errore bookmarks: " + e.getMessage());
@@ -488,27 +504,6 @@ public class CommandHandler {
         }
 
         return sb.toString();
-    }
-
-    private String getScheduleEmoji(String schedule) {
-        return switch (schedule) {
-            case "I", "II" -> "🔴";
-            case "III" -> "🟠";
-            case "IV" -> "🟡";
-            case "V" -> "🟢";
-            default -> "⚪";
-        };
-    }
-
-    private String getScheduleDescription(String schedule) {
-        return switch (schedule) {
-            case "I" -> "Alto potenziale di abuso, nessun uso medico negli USA";
-            case "II" -> "Alto potenziale di abuso, rischio grave dipendenza";
-            case "III" -> "Potenziale di abuso moderato";
-            case "IV" -> "Basso potenziale di abuso";
-            case "V" -> "Potenziale di abuso molto basso";
-            default -> "Informazioni non disponibili";
-        };
     }
 
     private String getClassificationEmoji(String classification) {

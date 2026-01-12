@@ -1,27 +1,18 @@
 package org.medBot.model;
 
-//Classe che rappresenta un richiamo FDA (enforcement report)
-//Un richiamo è un provvedimento per ritirare o correggere un farmaco problematico
+/*Classe modello che rappresenta un richiamo FDA
+I richiami sono provvedimenti per ritirare o correggere farmaci con problemi*/
 public class Recall {
-    private String recallId;            //ID univoco del richiamo assegnato dalla FDA
-    private String productDescription;  //Descrizione del prodotto richiamato
-    private String reasonForRecall;     //Motivo del richiamo (es. contaminazione, errore di dosaggio)
-    private String classification;      //Gravità del richiamo (Class I, II, III)
-    private String recallDate;         //Data del richiamo in formato YYYYMMDD
+    private String recallId;              //Identificativo univoco del richiamo FDA
+    private String productDescription;    //Descrizione del prodotto richiamato
+    private String reasonForRecall;       //Motivo del richiamo (es. contaminazione)
+    private String classification;        //Gravità: Class I (grave), II (moderato), III (lieve)
+    private String recallDate;            //Data del richiamo in formato YYYYMMDD
 
-    //Costruttore vuoto per la creazione di oggetti durante il parsing JSON
-    public Recall() {
-    }
+    //Costruttore vuoto necessario per la creazione dinamica degli oggetti
+    public Recall() {}
 
-    //Costruttore con i campi principali per creare un oggetto Recall
-    public Recall(String recallId, String productDescription, String reasonForRecall) {
-        this.recallId = recallId;
-        this.productDescription = productDescription;
-        this.reasonForRecall = reasonForRecall;
-    }
-
-    //Getter e Setter per accedere e modificare i campi privati
-    
+    //Getter e setter per l'ID del richiamo
     public String getRecallId() {
         return recallId;
     }
@@ -30,6 +21,7 @@ public class Recall {
         this.recallId = recallId;
     }
 
+    //Getter e setter per la descrizione del prodotto
     public String getProductDescription() {
         return productDescription;
     }
@@ -38,6 +30,7 @@ public class Recall {
         this.productDescription = productDescription;
     }
 
+    //Getter e setter per il motivo del richiamo
     public String getReasonForRecall() {
         return reasonForRecall;
     }
@@ -46,6 +39,7 @@ public class Recall {
         this.reasonForRecall = reasonForRecall;
     }
 
+    //Getter e setter per la classificazione di gravità
     public String getClassification() {
         return classification;
     }
@@ -54,23 +48,12 @@ public class Recall {
         this.classification = classification;
     }
 
+    //Getter e setter per la data del richiamo
     public String getRecallDate() {
         return recallDate;
     }
 
     public void setRecallDate(String recallDate) {
         this.recallDate = recallDate;
-    }
-
-    //Sovrascrive toString() per facilitare il debug
-    //Mostra i campi principali del richiamo in formato leggibile
-    @Override
-    public String toString() {
-        return "Recall{" +
-                "recallId='" + recallId + '\'' +
-                ", productDescription='" + productDescription + '\'' +
-                ", classification='" + classification + '\'' +
-                ", recallDate='" + recallDate + '\'' +
-                '}';
     }
 }

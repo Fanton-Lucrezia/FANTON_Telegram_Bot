@@ -8,8 +8,8 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
 
-//Servizio che gestisce le statistiche degli utenti e globali del bot
-//Traccia le ricerche effettuate e genera report statistici
+/*Servizio per gestire le statistiche del bot e degli utenti
+Traccia ricerche, calcola statistiche globali e personali*/
 public class StatisticsService {
     private final DatabaseManager dbManager;
 
@@ -18,150 +18,182 @@ public class StatisticsService {
         this.dbManager = DatabaseManager.getInstance();
     }
 
-    //Registra una nuova ricerca nel database
-    //Ogni volta che un utente cerca un farmaco, viene salvato nella tabella searches
-    public void recordSearch(long chatId, String searchTerm) {
-        try (Connection conn = dbManager.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(
-                     "INSERT INTO searches (telegram_id, query_text) VALUES (?, ?)")) {
-            pstmt.setLong(1, chatId);
-            pstmt.setString(2, searchTerm);
-            pstmt.executeUpdate();
+    /*Registra una ricerca effettuata dall'utente nel database
+    Incrementa anche il contatore di ricerche dell'utente*/
+    public void recordSearch(long chatId, String query) {
+        try (Connection conn = dbManager.getConnection()) {
+            //Inserisce la ricerca nella tabella searches
+            try (PreparedStatement pstmt = conn.prepareStatement(
+                    "INSERT INTO searches (telegram_id, query_text) VALUES (?, ?)")) {
+                pstmt.setLong(1, chatId);
+                pstmt.setString(2, query);
+                pstmt.executeUpdate();
+            }
+
+            //Incrementa il contatore nell'utente e aggiorna last_active
+            try (PreparedStatement pstmt = conn.prepareStatement(
+                    "UPDATE users SET search_count = search_count + 1, last_active = CURRENT_TIMESTAMP " +
+                            "WHERE telegram_id = ?")) {
+                pstmt.setLong(1, chatId);
+                pstmt.executeUpdate();
+            }
         } catch (Exception e) {
-            System.out.println("Errore salvataggio ricerca: " + e.getMessage());
+            System.out.println("Errore registrazione ricerca: " + e.getMessage());
         }
     }
 
-    //Genera le statistiche personali dell'utente
-    //Include: numero di ricerche, preferiti salvati, farmaco più cercato
-    public String getUserStats(long chatId) throws Exception {
-        StringBuilder response = new StringBuilder("📊 <b>Le tue statistiche</b>\n\n");
-
+    /*Restituisce le statistiche personali dell'utente
+    Include: numero di ricerche, farmaco più cercato, giorni di utilizzo*/
+    public String getUserStats(long chatId) {
         try (Connection conn = dbManager.getConnection()) {
-            //Conta il numero totale di ricerche effettuate dall'utente
+            //Recupera il numero totale di ricerche dell'utente
+            int totalSearches;
             try (PreparedStatement pstmt = conn.prepareStatement(
-                    "SELECT COUNT(*) FROM searches WHERE telegram_id = ?")) {
+                    "SELECT search_count FROM users WHERE telegram_id = ?")) {
                 pstmt.setLong(1, chatId);
                 ResultSet rs = pstmt.executeQuery();
-                if (rs.next()) {
-                    response.append("🔍 Ricerche totali: <b>").append(rs.getInt(1)).append("</b>\n");
-                }
+                totalSearches = rs.next() ? rs.getInt("search_count") : 0;
             }
 
-            //Conta il numero di farmaci salvati nei preferiti
-            try (PreparedStatement pstmt = conn.prepareStatement(
-                    "SELECT COUNT(*) FROM bookmarks WHERE telegram_id = ?")) {
-                pstmt.setLong(1, chatId);
-                ResultSet rs = pstmt.executeQuery();
-                if (rs.next()) {
-                    response.append("⭐ Preferiti salvati: <b>").append(rs.getInt(1)).append("</b>\n");
-                }
+            //Se l'utente non ha mai fatto ricerche, restituisce un messaggio appropriato
+            if (totalSearches == 0) {
+                return "📊 <b>Le Tue Statistiche</b>\n\n" +
+                        "Non hai ancora effettuato ricerche.\n\n" +
+                        "💡 Prova con <code>/cerca aspirin</code>";
             }
 
             //Trova il farmaco più cercato dall'utente
-            //GROUP BY raggruppa le ricerche per farmaco e COUNT conta quante volte
+            String topDrug = "N/A";
+            int topCount = 0;
             try (PreparedStatement pstmt = conn.prepareStatement(
                     "SELECT query_text, COUNT(*) as count FROM searches " +
-                            "WHERE telegram_id = ? GROUP BY query_text ORDER BY count DESC LIMIT 1")) {
+                            "WHERE telegram_id = ? GROUP BY LOWER(query_text) " +
+                            "ORDER BY count DESC LIMIT 1")) {
                 pstmt.setLong(1, chatId);
                 ResultSet rs = pstmt.executeQuery();
                 if (rs.next()) {
-                    response.append("\n🏆 Farmaco più cercato: <b>")
-                            .append(rs.getString("query_text"))
-                            .append("</b> (").append(rs.getInt("count")).append(" volte)");
+                    topDrug = rs.getString("query_text");
+                    topCount = rs.getInt("count");
                 }
             }
 
-            return response.toString();
+            //Calcola quanti giorni è passato dalla prima ricerca
+            int daysActive = 0;
+            try (PreparedStatement pstmt = conn.prepareStatement(
+                    "SELECT CAST((julianday('now') - julianday(MIN(created_at))) AS INTEGER) as days " +
+                            "FROM searches WHERE telegram_id = ?")) {
+                pstmt.setLong(1, chatId);
+                ResultSet rs = pstmt.executeQuery();
+                if (rs.next()) {
+                    daysActive = rs.getInt("days");
+                }
+            }
+
+            //Costruisce la risposta formattata con tutte le statistiche
+            return String.format(
+                    "📊 <b>Le Tue Statistiche</b>\n\n" +
+                            "🔍 Ricerche totali: <b>%d</b>\n" +
+                            "⭐ Farmaco preferito: <b>%s</b> (%d volte)\n" +
+                            "📅 Giorni attivo: <b>%d</b>\n\n" +
+                            "💡 Usa <code>/recenti</code> per vedere le tue ultime ricerche.",
+                    totalSearches, topDrug, topCount, daysActive);
+
+        } catch (Exception e) {
+            System.out.println("Errore statistiche utente: " + e.getMessage());
+            return "❌ Errore nel recuperare le statistiche.";
         }
     }
 
-    //Genera le statistiche globali del bot
-    //Mostra dati aggregati di tutti gli utenti: utenti totali, ricerche, top farmaci
-    public String getGlobalStats() throws Exception {
-        StringBuilder response = new StringBuilder("🌎 <b>Statistiche Globali</b>\n\n");
-
+    /*Restituisce le statistiche globali del bot
+    Include: utenti totali, ricerche totali, farmaco più cercato in assoluto*/
+    public String getGlobalStats() {
         try (Connection conn = dbManager.getConnection()) {
-            //Conta il numero totale di utenti unici che hanno usato il bot
-            try (PreparedStatement pstmt = conn.prepareStatement(
-                    "SELECT COUNT(DISTINCT telegram_id) FROM users")) {
+            //Conta il numero totale di utenti registrati
+            int totalUsers;
+            try (PreparedStatement pstmt = conn.prepareStatement("SELECT COUNT(*) FROM users")) {
                 ResultSet rs = pstmt.executeQuery();
-                if (rs.next()) {
-                    response.append("👥 Utenti totali: <b>").append(rs.getInt(1)).append("</b>\n");
-                }
+                totalUsers = rs.getInt(1);
             }
 
-            //Conta il numero totale di ricerche effettuate da tutti gli utenti
-            try (PreparedStatement pstmt = conn.prepareStatement(
-                    "SELECT COUNT(*) FROM searches")) {
+            //Conta il numero totale di ricerche effettuate
+            int totalSearches;
+            try (PreparedStatement pstmt = conn.prepareStatement("SELECT COUNT(*) FROM searches")) {
                 ResultSet rs = pstmt.executeQuery();
-                if (rs.next()) {
-                    response.append("🔍 Ricerche totali: <b>").append(rs.getInt(1)).append("</b>\n");
-                }
+                totalSearches = rs.getInt(1);
             }
 
-            //Conta il numero totale di farmaci salvati nei preferiti da tutti
-            try (PreparedStatement pstmt = conn.prepareStatement(
-                    "SELECT COUNT(*) FROM bookmarks")) {
-                ResultSet rs = pstmt.executeQuery();
-                if (rs.next()) {
-                    response.append("⭐ Preferiti salvati: <b>").append(rs.getInt(1)).append("</b>\n\n");
-                }
-            }
-
-            //Genera la classifica dei 5 farmaci più cercati in assoluto
-            response.append("<b>🔥 Top 5 farmaci più cercati:</b>\n");
+            //Trova il farmaco più cercato in assoluto da tutti gli utenti
+            String topDrug = "N/A";
+            int topCount = 0;
             try (PreparedStatement pstmt = conn.prepareStatement(
                     "SELECT query_text, COUNT(*) as count FROM searches " +
-                            "GROUP BY query_text ORDER BY count DESC LIMIT 5")) {
+                            "GROUP BY LOWER(query_text) ORDER BY count DESC LIMIT 1")) {
                 ResultSet rs = pstmt.executeQuery();
-                int position = 1;
-                boolean hasResults = false;
-                //Itera sui risultati e li formatta come classifica numerata
-                while (rs.next()) {
-                    hasResults = true;
-                    response.append(String.format("%d. %s (%d ricerche)\n",
-                            position++, rs.getString("query_text"), rs.getInt("count")));
-                }
-                
-                //Se non ci sono ancora ricerche, mostra un messaggio
-                if (!hasResults) {
-                    response.append("<i>Nessuna ricerca effettuata ancora</i>\n");
+                if (rs.next()) {
+                    topDrug = rs.getString("query_text");
+                    topCount = rs.getInt("count");
                 }
             }
 
-            return response.toString();
+            //Conta quanti utenti hanno usato il bot negli ultimi 7 giorni
+            int activeUsers;
+            try (PreparedStatement pstmt = conn.prepareStatement(
+                    "SELECT COUNT(*) FROM users WHERE last_active > datetime('now', '-7 days')")) {
+                ResultSet rs = pstmt.executeQuery();
+                activeUsers = rs.getInt(1);
+            }
+
+            //Costruisce la risposta formattata con tutte le statistiche globali
+            return String.format(
+                    "📊 <b>Statistiche Globali</b>\n\n" +
+                            "👥 Utenti totali: <b>%d</b>\n" +
+                            "✅ Utenti attivi (7gg): <b>%d</b>\n" +
+                            "🔍 Ricerche totali: <b>%d</b>\n" +
+                            "⭐ Farmaco più cercato: <b>%s</b> (%d volte)\n",
+                    totalUsers, activeUsers, totalSearches, topDrug, topCount);
+
+        } catch (Exception e) {
+            System.out.println("Errore statistiche globali: " + e.getMessage());
+            return "❌ Errore nel recuperare le statistiche.";
         }
     }
 
-    //Ottiene le ultime 10 ricerche distinte dell'utente
-    //Utile per ripetere velocemente ricerche precedenti
-    public String getRecentSearches(long chatId) throws Exception {
-        List<String> searches = new ArrayList<>();
-
-        //Recupera le ricerche più recenti, DISTINCT evita duplicati
+    /*Restituisce le ultime 10 ricerche dell'utente in ordine cronologico inverso
+    Mostra le ricerche più recenti per prime*/
+    public String getRecentSearches(long chatId) {
         try (Connection conn = dbManager.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(
-                     "SELECT DISTINCT query_text FROM searches " +
+                     "SELECT query_text, created_at FROM searches " +
                              "WHERE telegram_id = ? ORDER BY created_at DESC LIMIT 10")) {
+
             pstmt.setLong(1, chatId);
             ResultSet rs = pstmt.executeQuery();
+
+            List<String> searches = new ArrayList<>();
             while (rs.next()) {
                 searches.add(rs.getString("query_text"));
             }
-        }
 
-        //Se non ci sono ricerche recenti, restituisce un messaggio
-        if (searches.isEmpty()) {
-            return "📋 Nessuna ricerca recente.";
-        }
+            //Se non ci sono ricerche recenti, restituisce un messaggio appropriato
+            if (searches.isEmpty()) {
+                return "🕐 <b>Ricerche Recenti</b>\n\n" +
+                        "Non hai ancora effettuato ricerche.\n\n" +
+                        "💡 Prova con <code>/cerca aspirin</code>";
+            }
 
-        //Costruisce la lista delle ricerche recenti
-        StringBuilder response = new StringBuilder("🕒 <b>Ricerche recenti:</b>\n\n");
-        for (String search : searches) {
-            response.append("• ").append(search).append("\n");
-        }
+            //Costruisce la risposta formattata con tutte le ricerche recenti
+            StringBuilder response = new StringBuilder();
+            response.append("🕐 <b>Ricerche Recenti</b>\n\n");
 
-        return response.toString();
+            for (int i = 0; i < searches.size(); i++) {
+                response.append(i + 1).append(". ").append(searches.get(i)).append("\n");
+            }
+
+            return response.toString();
+
+        } catch (Exception e) {
+            System.out.println("Errore ricerche recenti: " + e.getMessage());
+            return "❌ Errore nel recuperare le ricerche.";
+        }
     }
 }

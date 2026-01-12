@@ -6,6 +6,7 @@ import org.apache.commons.configuration2.PropertiesConfiguration;
 import org.apache.commons.configuration2.builder.FileBasedConfigurationBuilder;
 import org.apache.commons.configuration2.builder.fluent.Parameters;
 import org.apache.commons.configuration2.ex.ConfigurationException;
+import java.io.File;
 
 //Classe che gestisce la configurazione dell'applicazione leggendo dal file config.properties
 //Utilizza il pattern Singleton per garantire una sola istanza in tutta l'applicazione
@@ -21,9 +22,10 @@ public class MyConfiguration {
             Parameters params = new Parameters();
             
             //Costruisce il configuration builder che gestirà il file properties
+            //Usa File invece di setFileName per compatibilità con versione 2.x
             FileBasedConfigurationBuilder<FileBasedConfiguration> builder =
                     new FileBasedConfigurationBuilder<>(PropertiesConfiguration.class)
-                            .configure(params.properties().setFileName("config.properties"));
+                            .configure(params.fileBased().setFile(new File("config.properties")));
             
             //Ottiene l'oggetto Configuration che permette di leggere le proprietà
             config = builder.getConfiguration();

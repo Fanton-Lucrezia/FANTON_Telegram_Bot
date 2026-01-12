@@ -1,31 +1,50 @@
 package org.medBot;
 
-
 import org.apache.commons.configuration2.Configuration;
-import org.apache.commons.configuration2.builder.fluent.Configurations;
+import org.apache.commons.configuration2.FileBasedConfiguration;
+import org.apache.commons.configuration2.PropertiesConfiguration;
+import org.apache.commons.configuration2.builder.FileBasedConfigurationBuilder;
+import org.apache.commons.configuration2.builder.fluent.Parameters;
 import org.apache.commons.configuration2.ex.ConfigurationException;
 
+//Classe che gestisce la configurazione dell'applicazione leggendo dal file config.properties
+//Utilizza il pattern Singleton per garantire una sola istanza in tutta l'applicazione
 public class MyConfiguration {
     private static MyConfiguration instance;
-    private Configurations configs = new Configurations();
-    private Configuration config;
+    private final Configuration config;
 
-    private  MyConfiguration(){
+    //Costruttore privato per impedire la creazione diretta di istanze
+    //Carica il file di configurazione all'inizializzazione
+    private MyConfiguration() {
         try {
-            config = configs.properties("config.properties");
+            //Crea i parametri per il builder specificando il file da leggere
+            Parameters params = new Parameters();
+            
+            //Costruisce il configuration builder che gestirà il file properties
+            FileBasedConfigurationBuilder<FileBasedConfiguration> builder =
+                    new FileBasedConfigurationBuilder<>(PropertiesConfiguration.class)
+                            .configure(params.properties().setFileName("config.properties"));
+            
+            //Ottiene l'oggetto Configuration che permette di leggere le proprietà
+            config = builder.getConfiguration();
         } catch (ConfigurationException e) {
-            System.err.println("File non disponibile");
-            System.exit(-1);
+            //Se il file non esiste o è malformato, lancia un'eccezione
+            throw new RuntimeException("Errore caricamento config.properties", e);
         }
     }
 
-    public static MyConfiguration getInstance(){
-        if(instance == null)
+    //Metodo statico per ottenere l'unica istanza della classe (Singleton pattern)
+    //Se l'istanza non esiste ancora, la crea; altrimenti restituisce quella esistente
+    public static synchronized MyConfiguration getInstance() {
+        if (instance == null) {
             instance = new MyConfiguration();
+        }
         return instance;
     }
 
-    public String getProperty(String key){
+    //Restituisce il valore di una proprietà dato il suo nome
+    //Esempio: getProperty("BOT_TOKEN") restituisce il token del bot
+    public String getProperty(String key) {
         return config.getString(key);
     }
 }

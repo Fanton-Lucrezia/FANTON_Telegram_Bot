@@ -10,16 +10,20 @@ import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Bot Telegram per informazioni su farmaci tramite API OpenFDA.
- * Classe principale che gestisce gli update e delega i comandi al CommandHandler.
  */
 public class MedBot implements LongPollingSingleThreadUpdateConsumer {
     private final TelegramClient telegramClient;
     private final MessageSender messageSender;
     private final CommandHandler commandHandler;
     private final DatabaseManager dbManager;
+    
+    //Memorizza gli utenti in attesa di completare un comando
+    private final Map<Long, String> waitingForInput = new HashMap<>();
 
     public MedBot() {
         String botToken = MyConfiguration.getInstance().getProperty("BOT_TOKEN");
@@ -27,67 +31,133 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
         this.messageSender = new MessageSender(telegramClient);
         this.commandHandler = new CommandHandler(messageSender);
         this.dbManager = DatabaseManager.getInstance();
-        System.out.println("MedBot inizializzato");
+        System.out.println("Bot avviato");
     }
 
     @Override
     public void consume(Update update) {
-        //Gestisce i messaggi di testo
         if (update.hasMessage() && update.getMessage().hasText()) {
             String messageText = update.getMessage().getText().trim();
             long chatId = update.getMessage().getChatId();
             String username = update.getMessage().getFrom().getUserName();
 
-            //Registra l'utente nel database
             registerUser(chatId, username);
 
-            //Gestisce i comandi
+            //Controlla se l'utente sta rispondendo a una richiesta di input
+            if (waitingForInput.containsKey(chatId)) {
+                handlePendingCommand(chatId, messageText);
+                return;
+            }
+
             if (messageText.startsWith("/")) {
                 handleCommand(chatId, messageText, username);
             } else {
-                messageSender.sendMessageWithMenu(chatId, "❓ Comando non riconosciuto. Usa il menù:");
+                messageSender.sendMessage(chatId, "❓ Comando non riconosciuto. Usa /help per la lista comandi.");
             }
-        }
-        //Gestisce i callback dai bottoni inline
-        else if (update.hasCallbackQuery()) {
+        } else if (update.hasCallbackQuery()) {
             handleCallback(update);
         }
     }
 
     /**
-     * Distribuisce i comandi al CommandHandler appropriato.
+     * Gestisce la risposta dell'utente quando è in attesa di un parametro.
      */
+    private void handlePendingCommand(long chatId, String input) {
+        String pendingCommand = waitingForInput.remove(chatId);
+        
+        //Se l'utente invia un altro comando, annulla l'operazione
+        if (input.startsWith("/")) {
+            messageSender.sendMessage(chatId, "❌ Operazione annullata.");
+            return;
+        }
+
+        //Esegue il comando con il parametro fornito
+        switch (pendingCommand) {
+            case "cerca" -> commandHandler.handleSearchDrug(chatId, input, 0);
+            case "richiami" -> commandHandler.handleRecalls(chatId, input, 0);
+            case "farmacolegale" -> commandHandler.handleControlledSubstance(chatId, input);
+            case "effetticollaterali" -> commandHandler.handleAdverseEvents(chatId, input);
+            case "interazioni" -> commandHandler.handleDrugInteractions(chatId, input);
+            case "bookmarks_add" -> commandHandler.handleBookmarks(chatId, "add " + input);
+            case "bookmarks_remove" -> commandHandler.handleBookmarks(chatId, "remove " + input);
+        }
+    }
+
     private void handleCommand(long chatId, String message, String username) {
-        //Divide il comando dagli argomenti
         String[] parts = message.split("\\s+", 2);
         String command = parts[0].toLowerCase();
         String args = parts.length > 1 ? parts[1].trim() : "";
 
-        //Esegue il comando corrispondente
         switch (command) {
             case "/start" -> commandHandler.handleStart(chatId, username);
             case "/help" -> commandHandler.handleHelp(chatId);
-            case "/cerca" -> commandHandler.handleSearchDrug(chatId, args, 0);
-            case "/richiami" -> commandHandler.handleRecalls(chatId, args, 0);
+            
+            case "/cerca" -> {
+                if (args.isEmpty()) {
+                    waitingForInput.put(chatId, "cerca");
+                    messageSender.sendMessage(chatId, "📝 <b>Inserisci il nome del farmaco da cercare:</b>\n\n" +
+                            "💡 Esempio: aspirin, ibuprofen, paracetamol");
+                } else {
+                    commandHandler.handleSearchDrug(chatId, args, 0);
+                }
+            }
+            
+            case "/richiami" -> {
+                if (args.isEmpty()) {
+                    waitingForInput.put(chatId, "richiami");
+                    messageSender.sendMessage(chatId, "📝 <b>Inserisci il nome del farmaco o 'all':</b>\n\n" +
+                            "💡 Esempi:\n" +
+                            "• aspirin (per un farmaco specifico)\n" +
+                            "• all (per tutti gli ultimi richiami)");
+                } else {
+                    commandHandler.handleRecalls(chatId, args, 0);
+                }
+            }
+            
+            case "/farmacolegale" -> {
+                if (args.isEmpty()) {
+                    waitingForInput.put(chatId, "farmacolegale");
+                    messageSender.sendMessage(chatId, "📝 <b>Inserisci il nome del farmaco:</b>\n\n" +
+                            "💡 Esempi: oxycodone, alprazolam, tramadol\n\n" +
+                            "<i>Verifica se è una sostanza controllata.</i>");
+                } else {
+                    commandHandler.handleControlledSubstance(chatId, args);
+                }
+            }
+            
+            case "/effetticollaterali" -> {
+                if (args.isEmpty()) {
+                    waitingForInput.put(chatId, "effetticollaterali");
+                    messageSender.sendMessage(chatId, "📝 <b>Inserisci il nome del farmaco:</b>\n\n" +
+                            "💡 Esempio: aspirin, ibuprofen");
+                } else {
+                    commandHandler.handleAdverseEvents(chatId, args);
+                }
+            }
+            
+            case "/interazioni" -> {
+                if (args.isEmpty()) {
+                    waitingForInput.put(chatId, "interazioni");
+                    messageSender.sendMessage(chatId, "📝 <b>Inserisci i farmaci separati da +:</b>\n\n" +
+                            "💡 Esempio: aspirin + ibuprofen");
+                } else {
+                    commandHandler.handleDrugInteractions(chatId, args);
+                }
+            }
+            
             case "/mystats" -> commandHandler.handleMyStats(chatId);
             case "/recenti" -> commandHandler.handleRecentSearches(chatId);
-            case "/farmacolegale" -> commandHandler.handleControlledSubstance(chatId, args);
-            case "/effetticollaterali" -> commandHandler.handleAdverseEvents(chatId, args);
-            case "/interazioni" -> commandHandler.handleDrugInteractions(chatId, args);
             case "/bookmarks" -> commandHandler.handleBookmarks(chatId, args);
-            default -> messageSender.sendMessageWithMenu(chatId, "❓ Comando sconosciuto. Usa /help:");
+            
+            default -> messageSender.sendMessage(chatId, "❓ Comando sconosciuto. Usa /help");
         }
     }
 
-    /**
-     * Gestisce i callback dai bottoni inline.
-     */
     private void handleCallback(Update update) {
         String callbackData = update.getCallbackQuery().getData();
         long chatId = update.getCallbackQuery().getMessage().getChatId();
         int messageId = update.getCallbackQuery().getMessage().getMessageId();
 
-        //Rimuove la tastiera inline dal messaggio precedente
         try {
             telegramClient.execute(
                     org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup.builder()
@@ -96,10 +166,9 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
                             .replyMarkup(null)
                             .build());
         } catch (TelegramApiException e) {
-            //Ignora errori (es. messaggio troppo vecchio)
+            //Ignora errori (messaggio troppo vecchio)
         }
 
-        //Gestisce i diversi tipi di callback
         if (callbackData.startsWith("recalls:")) {
             String drugName = callbackData.substring(8);
             commandHandler.handleRecalls(chatId, drugName, 0);
@@ -115,9 +184,6 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
         }
     }
 
-    /**
-     * Registra un utente nel database (o aggiorna last_active).
-     */
     private void registerUser(long chatId, String username) {
         try (Connection conn = dbManager.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(

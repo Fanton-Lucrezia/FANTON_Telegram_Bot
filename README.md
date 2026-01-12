@@ -3,7 +3,6 @@
 [![Java](https://img.shields.io/badge/Java-17+-orange.svg)](https://www.java.com)
 [![Telegram](https://img.shields.io/badge/Telegram-Bot-blue.svg)](https://telegram.org)
 [![OpenFDA](https://img.shields.io/badge/API-OpenFDA-green.svg)](https://open.fda.gov)
-[![License](https://img.shields.io/badge/License-Educational-yellow.svg)](LICENSE)
 
 > Bot Telegram per ricercare informazioni su farmaci utilizzando le API ufficiali della FDA (Food and Drug Administration) americana.
 
@@ -21,10 +20,10 @@
 - 📊 **Visualizzare statistiche** personali di utilizzo
 
 Il bot utilizza un'**interfaccia moderna** con:
-- 🟢 Tastiera permanente per comandi rapidi
 - 🔘 Bottoni inline per azioni contestuali
 - 📋 Paginazione per navigare tra i risultati
 - 💾 Database SQLite per caching e storico
+- 💬 Sistema di conversazione per comandi incompleti
 
 ---
 
@@ -110,9 +109,8 @@ java -jar target/FANTON_Telegram_Bot-1.0-SNAPSHOT.jar
 
 Dovresti vedere:
 ```
-Database inizializzato correttamente!
-MedBot inizializzato con 10 comandi
-Bot avviato con successo!
+Database inizializzato
+Bot avviato
 ```
 
 ---
@@ -122,7 +120,7 @@ Bot avviato con successo!
 ### Comandi Disponibili
 
 #### 🎯 Comandi Base
-- `/start` - Messaggio di benvenuto e attivazione menù
+- `/start` - Messaggio di benvenuto
 - `/help` - Guida completa ai comandi
 
 #### 🔍 Ricerca Farmaci
@@ -133,6 +131,8 @@ Ricerca farmaci per nome (brand o generico).
 
 **Esempio**: `/cerca aspirin`
 
+💡 **Nota**: Se invii solo `/cerca`, il bot ti chiederà di inserire il nome del farmaco.
+
 #### ⚠️ Sicurezza e Richiami
 ```
 /richiami <nome|all>
@@ -142,6 +142,7 @@ Verifica richiami FDA per un farmaco o mostra tutti i richiami recenti.
 **Esempi**: 
 - `/richiami aspirin`
 - `/richiami all`
+- `/richiami` (il bot ti chiederà il nome)
 
 #### 🚨 Sostanze Controllate
 ```
@@ -201,10 +202,16 @@ Visualizza le ultime 10 ricerche effettuate.
 
 ## 💬 Esempi di Conversazione
 
-### Esempio 1: Ricerca Farmaco
+### Esempio 1: Ricerca con Comando Incompleto
 
 ```
-👤 Utente: /cerca aspirin
+👤 Utente: /cerca
+
+🤖 Bot: 📝 Inserisci il nome del farmaco da cercare:
+
+💡 Esempio: aspirin, ibuprofen, paracetamol
+
+👤 Utente: aspirin
 
 🤖 Bot:
 ✅ 3 risultati per "aspirin":
@@ -214,7 +221,6 @@ Visualizza le ultime 10 ricerche effettuate.
    🏭 Produttore: Bayer Healthcare
    💊 Indicazioni:
    • For temporary relief of minor aches and pains.
-   • Reduces risk of heart attack and stroke.
 
 [🔍 Richiami] [⭐ Salva]
 ```
@@ -229,17 +235,13 @@ Visualizza le ultime 10 ricerche effettuate.
 
 Farmaci: aspirin + warfarin
 
-📊 247 segnalazioni di eventi avversi quando questi 
-farmaci sono usati insieme.
+📊 247 segnalazioni di eventi avversi.
 
-🔴 Reazioni più comuni:
+🔴 Reazioni comuni:
 • Haemorrhage
 • International normalised ratio increased
-• Gastrointestinal haemorrhage
 
-🚨 IMPORTANTE:
-• NON interrompere i farmaci senza consultare un medico
-• Consulta un medico o farmacista per informazioni accurate
+🚨 Consulta un medico per informazioni accurate.
 ```
 
 ### Esempio 3: Sostanza Controllata
@@ -277,13 +279,6 @@ CREATE TABLE users (
 );
 ```
 
-**Campi**:
-- `telegram_id` - ID univoco Telegram dell'utente
-- `username` - Username Telegram
-- `search_count` - Numero totale di ricerche effettuate
-- `first_seen` - Data prima interazione
-- `last_active` - Data ultima attività
-
 ### Tabella `searches`
 Storia completa delle ricerche effettuate.
 
@@ -295,15 +290,7 @@ CREATE TABLE searches (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
 );
-
-CREATE INDEX idx_searches_telegram_id ON searches(telegram_id);
-CREATE INDEX idx_searches_created_at ON searches(created_at);
 ```
-
-**Campi**:
-- `telegram_id` - Riferimento all'utente
-- `query_text` - Testo della ricerca
-- `created_at` - Timestamp ricerca
 
 ### Tabella `drugs_cache`
 Cache delle informazioni sui farmaci per ridurre chiamate API.
@@ -317,18 +304,7 @@ CREATE TABLE drugs_cache (
     indications TEXT,
     last_fetched TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE INDEX idx_drugs_brand ON drugs_cache(brand_name);
-CREATE INDEX idx_drugs_generic ON drugs_cache(generic_name);
 ```
-
-**Campi**:
-- `drug_id` - ID univoco generato
-- `brand_name` - Nome commerciale
-- `generic_name` - Nome generico
-- `manufacturer` - Produttore
-- `indications` - Indicazioni terapeutiche
-- `last_fetched` - Data recupero da API
 
 **Cache Duration**: 24 ore
 
@@ -344,78 +320,6 @@ CREATE TABLE bookmarks (
     UNIQUE(telegram_id, drug_name),
     FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
 );
-
-CREATE INDEX idx_bookmarks_telegram_id ON bookmarks(telegram_id);
-```
-
-**Campi**:
-- `telegram_id` - Riferimento all'utente
-- `drug_name` - Nome farmaco salvato
-- `created_at` - Data aggiunta
-
-### Relazioni tra Tabelle
-
-```
-users (1) ----< (*) searches
-  |  
-  └-----------< (*) bookmarks
-```
-
----
-
-## 📊 Esempi di Query SQL
-
-### Query 1: Top 10 farmaci più cercati
-```sql
-SELECT 
-    query_text, 
-    COUNT(*) as search_count
-FROM searches
-GROUP BY LOWER(query_text)
-ORDER BY search_count DESC
-LIMIT 10;
-```
-
-### Query 2: Utenti più attivi
-```sql
-SELECT 
-    username, 
-    search_count,
-    DATE(last_active) as ultima_attivita
-FROM users
-ORDER BY search_count DESC
-LIMIT 10;
-```
-
-### Query 3: Ricerche per giorno
-```sql
-SELECT 
-    DATE(created_at) as data,
-    COUNT(*) as ricerche_giornaliere
-FROM searches
-GROUP BY DATE(created_at)
-ORDER BY data DESC
-LIMIT 30;
-```
-
-### Query 4: Farmaci più salvati nei preferiti
-```sql
-SELECT 
-    drug_name,
-    COUNT(*) as utenti_che_lhanno_salvato
-FROM bookmarks
-GROUP BY LOWER(drug_name)
-ORDER BY utenti_che_lhanno_salvato DESC
-LIMIT 10;
-```
-
-### Query 5: Efficacia cache
-```sql
-SELECT 
-    COUNT(*) as farmaci_in_cache,
-    COUNT(CASE WHEN last_fetched > datetime('now', '-24 hours') 
-          THEN 1 END) as cache_valida
-FROM drugs_cache;
 ```
 
 ---
@@ -426,44 +330,32 @@ FROM drugs_cache;
 FANTON_Telegram_Bot/
 ├── src/main/java/org/medBot/
 │   ├── bot/
-│   │   └── MedBot.java              # Bot principale (semplificato)
-│   ├── handler/                  # Handler per ogni comando
-│   │   ├── CommandHandler.java      # Interfaccia base
-│   │   ├── StartHandler.java
-│   │   ├── HelpHandler.java
-│   │   ├── SearchHandler.java
-│   │   ├── RecallsHandler.java
-│   │   ├── ControlledSubstanceHandler.java
-│   │   ├── AdverseEventsHandler.java
-│   │   ├── InteractionsHandler.java
-│   │   ├── StatsHandler.java
-│   │   ├── RecentHandler.java
-│   │   └── BookmarksHandler.java
+│   │   ├── MedBot.java              # Bot principale
+│   │   ├── CommandHandler.java      # Gestione comandi
+│   │   └── MessageSender.java       # Invio messaggi
 │   ├── service/
-│   │   └── OpenFdaService.java      # Gestione API FDA
+│   │   ├── OpenFdaService.java      # API FDA
+│   │   ├── StatisticsService.java   # Statistiche
+│   │   └── BookmarkService.java     # Preferiti
 │   ├── dao/
-│   │   └── DatabaseManager.java     # Gestione database
+│   │   └── DatabaseManager.java     # Database
 │   ├── model/
 │   │   ├── Drug.java               # Modello farmaco
 │   │   └── Recall.java             # Modello richiamo
-│   ├── util/
-│   │   └── MessageSender.java      # Utility invio messaggi
 │   └── MyConfiguration.java      # Configurazione
 ├── config.properties             # Configurazione (NON su Git)
 ├── pom.xml                       # Dipendenze Maven
 └── README.md                     # Questo file
 ```
 
-### Architettura
-
-1. **Handler Pattern**: Ogni comando ha il suo handler dedicato per separazione delle responsabilità
-2. **Service Layer**: `OpenFdaService` gestisce tutte le chiamate API
-3. **DAO Layer**: `DatabaseManager` gestisce accesso database
-4. **Utility Classes**: `MessageSender` centralizza invio messaggi
-
 ---
 
 ## ⚙️ Caratteristiche Tecniche
+
+### Sistema di Conversazione
+- Il bot ricorda quando un utente invia un comando incompleto
+- Chiede il parametro mancante e completa automaticamente il comando
+- Gestisce l'annullamento se l'utente invia un altro comando
 
 ### Caching Intelligente
 - Le informazioni sui farmaci vengono salvate nel database per **24 ore**
@@ -473,7 +365,7 @@ FANTON_Telegram_Bot/
 ### Gestione Errori
 - Try-catch su tutte le operazioni critiche
 - Messaggi di errore user-friendly
-- Log essenziali con `System.out.println`
+- Log essenziali in italiano
 
 ### Paginazione
 - Risultati divisi in pagine navigabili
@@ -510,16 +402,9 @@ I dati provengono dalla FDA americana, quindi:
 
 ## 👩‍💻 Autore
 
-**Fanton Lucrezia**  
-Progetto scolastico - TPSIT - 5° Superiore
+**Fanton Lucrezia**
 
 GitHub: [@Fanton-Lucrezia](https://github.com/Fanton-Lucrezia)
-
----
-
-## 📜 Licenza
-
-Progetto educativo per scopi didattici.
 
 ---
 
@@ -529,9 +414,3 @@ Progetto educativo per scopi didattici.
 - [Telegram Bot API](https://core.telegram.org/bots/api)
 - [TelegramBots Java Library](https://github.com/rubenlagus/TelegramBots)
 - [FDA Drug Information](https://www.fda.gov/drugs)
-
----
-
-<p align="center">
-  <i>Made with ❤️ for educational purposes</i>
-</p>

@@ -1,10 +1,8 @@
 package org.medBot;
 
 import org.apache.commons.configuration2.Configuration;
-import org.apache.commons.configuration2.FileBasedConfiguration;
 import org.apache.commons.configuration2.PropertiesConfiguration;
-import org.apache.commons.configuration2.builder.FileBasedConfigurationBuilder;
-import org.apache.commons.configuration2.builder.fluent.Parameters;
+import org.apache.commons.configuration2.builder.fluent.Configurations;
 import org.apache.commons.configuration2.ex.ConfigurationException;
 import java.io.File;
 
@@ -18,17 +16,12 @@ public class MyConfiguration {
     //Carica il file di configurazione all'inizializzazione
     private MyConfiguration() {
         try {
-            //Crea i parametri per il builder specificando il file da leggere
-            Parameters params = new Parameters();
+            //Usa Configurations che semplifica il caricamento del file properties
+            //Questo metodo è compatibile con Apache Commons Configuration 2.x
+            Configurations configs = new Configurations();
             
-            //Costruisce il configuration builder che gestirà il file properties
-            //Usa File invece di setFileName per compatibilità con versione 2.x
-            FileBasedConfigurationBuilder<FileBasedConfiguration> builder =
-                    new FileBasedConfigurationBuilder<>(PropertiesConfiguration.class)
-                            .configure(params.fileBased().setFile(new File("config.properties")));
-            
-            //Ottiene l'oggetto Configuration che permette di leggere le proprietà
-            config = builder.getConfiguration();
+            //Carica il file config.properties dalla root del progetto
+            config = configs.properties(new File("config.properties"));
         } catch (ConfigurationException e) {
             //Se il file non esiste o è malformato, lancia un'eccezione
             throw new RuntimeException("Errore caricamento config.properties", e);

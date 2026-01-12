@@ -1,25 +1,27 @@
 package org.medBot.model;
 
-/**
- * Model class representing an FDA enforcement report (recall).
- */
+//Classe che rappresenta un richiamo FDA (enforcement report)
+//Un richiamo è un provvedimento per ritirare o correggere un farmaco problematico
 public class Recall {
-    private String recallId;
-    private String productDescription;
-    private String reasonForRecall;
-    private String classification;
-    private String recallDate;
+    private String recallId;            //ID univoco del richiamo assegnato dalla FDA
+    private String productDescription;  //Descrizione del prodotto richiamato
+    private String reasonForRecall;     //Motivo del richiamo (es. contaminazione, errore di dosaggio)
+    private String classification;      //Gravità del richiamo (Class I, II, III)
+    private String recallDate;         //Data del richiamo in formato YYYYMMDD
 
+    //Costruttore vuoto per la creazione di oggetti durante il parsing JSON
     public Recall() {
     }
 
+    //Costruttore con i campi principali per creare un oggetto Recall
     public Recall(String recallId, String productDescription, String reasonForRecall) {
         this.recallId = recallId;
         this.productDescription = productDescription;
         this.reasonForRecall = reasonForRecall;
     }
 
-    // Getters and Setters
+    //Getter e Setter per accedere e modificare i campi privati
+    
     public String getRecallId() {
         return recallId;
     }
@@ -60,6 +62,8 @@ public class Recall {
         this.recallDate = recallDate;
     }
 
+    //Sovrascrive toString() per facilitare il debug
+    //Mostra i campi principali del richiamo in formato leggibile
     @Override
     public String toString() {
         return "Recall{" +

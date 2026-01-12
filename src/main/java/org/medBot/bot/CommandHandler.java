@@ -14,7 +14,6 @@ import java.util.List;
 
 /**
  * Gestisce tutti i comandi del bot.
- * Separa la logica dei comandi dalla classe principale MedBot.
  */
 public class CommandHandler {
     private final OpenFdaService fdaService;
@@ -41,10 +40,10 @@ public class CommandHandler {
                         "🔬 Bot per informazioni su farmaci usando le API della FDA americana.\n\n" +
                         "🇺🇸 I dati sono in <b>inglese</b>, cerca i farmaci con nomi inglesi " +
                         "(es. 'aspirin' invece di 'aspirina').\n\n" +
-                        "📖 Usa /help o il menù qui sotto per iniziare!",
+                        "📖 Usa /help per iniziare!",
                 username != null ? username : "utente");
 
-        messageSender.sendMessageWithMenu(chatId, welcome + DISCLAIMER);
+        messageSender.sendMessage(chatId, welcome + DISCLAIMER);
     }
 
     /**
@@ -58,7 +57,7 @@ public class CommandHandler {
                 "/cerca &lt;nome&gt; - Cerca un farmaco\n" +
                 "Esempio: <code>/cerca aspirin</code>\n\n" +
                 "<b>⚠️ Sicurezza</b>\n" +
-                "/richiami &lt;nome|all&gt; - Controlla richiami che sono stati ritirati dal mercato per problemi di qualità, sicurezza o efficacia, per proteggere la salute pubblica\n" +
+                "/richiami &lt;nome|all&gt; - Controlla richiami FDA\n" +
                 "/farmacolegale &lt;nome&gt; - Verifica se è sostanza controllata\n" +
                 "/effetticollaterali &lt;nome&gt; - Effetti collaterali segnalati\n" +
                 "/interazioni &lt;farmaco1 + farmaco2&gt; - Verifica interazioni\n\n" +
@@ -66,10 +65,8 @@ public class CommandHandler {
                 "/mystats - Le tue statistiche\n" +
                 "/recenti - Farmaci cercati di recente\n" +
                 "/bookmarks - Gestisci i preferiti\n\n" +
-                "<b>💡 Esempi:</b>\n" +
-                "• <code>/cerca ibuprofen</code>\n" +
-                "• <code>/farmacolegale oxycodone</code>\n" +
-                "• <code>/interazioni aspirin + ibuprofen</code>";
+                "<b>💡 Suggerimento:</b>\n" +
+                "Puoi inviare un comando senza parametri e ti chiederò di inserire le informazioni necessarie.";
 
         messageSender.sendMessage(chatId, help);
     }

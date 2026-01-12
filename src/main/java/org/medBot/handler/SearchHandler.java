@@ -1,81 +1,87 @@
 package org.medBot.handler;
 
-import org.medBot.dao.DatabaseManager;
+import org.medBot.bot.MessageSender;
 import org.medBot.model.Drug;
 import org.medBot.service.OpenFdaService;
-import org.medBot.util.MessageSender;
+import org.medBot.service.StatisticsService;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Gestisce il comando /cerca per la ricerca di farmaci.
- */
+//Gestisce il comando /cerca per la ricerca di farmaci nelle API FDA
 public class SearchHandler implements CommandHandler {
-    
     private final OpenFdaService fdaService;
-    private final DatabaseManager dbManager;
-    
-    public SearchHandler(OpenFdaService fdaService, DatabaseManager dbManager) {
+    private final StatisticsService statsService;
+    private final MessageSender messageSender;
+
+    public SearchHandler(OpenFdaService fdaService, StatisticsService statsService, MessageSender messageSender) {
         this.fdaService = fdaService;
-        this.dbManager = dbManager;
+        this.statsService = statsService;
+        this.messageSender = messageSender;
     }
-    
+
     @Override
-    public void handle(long chatId, String args, TelegramClient telegramClient) {
-        handleSearch(chatId, args, 0, telegramClient);
+    public void handle(long chatId, String args, String username, TelegramClient telegramClient) {
+        handleWithOffset(chatId, args, 0, telegramClient);
     }
-    
-    /**
-     * Gestisce la ricerca con paginazione.
-     */
-    public void handleSearch(long chatId, String drugName, int offset, TelegramClient telegramClient) {
-        //Verifica che sia stato specificato un nome
-        if (drugName.isEmpty()) {
-            MessageSender.send(chatId, "❌ Specifica il nome del farmaco!\n\n" +
-                    "📝 Esempio: <code>/cerca aspirin</code>", telegramClient);
+
+    /*Gestisce la ricerca con paginazione
+    offset: posizione da cui iniziare a mostrare i risultati (0 per la prima pagina)*/
+    public void handleWithOffset(long chatId, String drugName, int offset, TelegramClient telegramClient) {
+        //Validazione input: controlla che il nome sia valido
+        if (drugName == null || drugName.isEmpty() || drugName.length() < 2) {
+            messageSender.sendMessage(chatId, "❌ Nome farmaco non valido.\n\n" +
+                    "📝 Esempio corretto: <code>/cerca aspirin</code>");
             return;
         }
-        
-        //Mostra messaggio di caricamento solo alla prima pagina
-        if (offset == 0) {
-            MessageSender.send(chatId, "🔍 Cerco \"" + drugName + "\"...", telegramClient);
-            recordSearch(chatId, drugName);
+
+        //Controlla se l'utente ha inserito più farmaci separati (non supportato)
+        if (drugName.contains(",") || drugName.contains(";")) {
+            messageSender.sendMessage(chatId, "❌ Specifica un solo farmaco per volta.\n\n" +
+                    "📝 Esempio corretto: <code>/cerca aspirin</code>");
+            return;
         }
-        
+
+        //Solo alla prima pagina (offset=0) mostra messaggio di caricamento e registra la ricerca
+        if (offset == 0) {
+            messageSender.sendMessage(chatId, "🔍 Cerco \"" + drugName + "\"...");
+            statsService.recordSearch(chatId, drugName);
+        }
+
         try {
+            //Chiama il servizio FDA per ottenere i risultati
             List<Drug> drugs = fdaService.searchDrug(drugName);
-            
+
+            //Se non trova nulla, informa l'utente
             if (drugs.isEmpty()) {
-                MessageSender.send(chatId, "❌ Nessun risultato per \"" + drugName + "\".\n\n" +
-                        "💡 Prova con il nome generico o in inglese.", telegramClient);
+                messageSender.sendMessage(chatId, "❌ Nessun risultato per \"" + drugName + "\".\n\n" +
+                        "💡 Prova con il nome generico o in inglese.");
                 return;
             }
-            
-            //Implementa la paginazione dei risultati (3 risultati per pagina)
+
+            //Paginazione: mostra 3 risultati per volta
             int pageSize = 3;
             int end = Math.min(offset + pageSize, drugs.size());
-            
+
+            //Costruisce la risposta formattata
             StringBuilder response = new StringBuilder();
-            response.append(String.format("✅ <b>%d risultati</b> per \"%s\":\n\n", 
+            response.append(String.format("✅ <b>%d risultati</b> per \"%s\":\n\n",
                     drugs.size(), drugName));
-            
-            //Formatta ogni farmaco trovato
+
+            //Formatta ogni farmaco della pagina corrente
             for (int i = offset; i < end; i++) {
-                response.append(formatDrug(drugs.get(i), i + 1));
+                response.append(formatDrugInfo(drugs.get(i), i + 1));
                 if (i < end - 1) response.append("\n➖➖➖\n\n");
             }
-            
-            //Crea i bottoni per navigazione e azioni
+
+            //Crea i bottoni inline per azioni rapide
             List<InlineKeyboardRow> rows = new ArrayList<>();
-            
-            //Bottone per vedere altri risultati se disponibili
+
+            //Se ci sono altri risultati, aggiunge il bottone "Altri risultati"
             if (end < drugs.size()) {
                 InlineKeyboardButton moreButton = InlineKeyboardButton.builder()
                         .text(String.format("⬇️ Altri %d risultati", drugs.size() - end))
@@ -83,8 +89,8 @@ public class SearchHandler implements CommandHandler {
                         .build();
                 rows.add(new InlineKeyboardRow(moreButton));
             }
-            
-            //Bottoni per azioni sul farmaco
+
+            //Riga di bottoni per azioni (Richiami e Salva)
             InlineKeyboardRow actionsRow = new InlineKeyboardRow();
             actionsRow.add(InlineKeyboardButton.builder()
                     .text("🔍 Richiami")
@@ -95,90 +101,70 @@ public class SearchHandler implements CommandHandler {
                     .callbackData("bookmark:" + drugName)
                     .build());
             rows.add(actionsRow);
-            
+
+            //Crea la tastiera inline con tutti i bottoni
             InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
                     .keyboard(rows)
                     .build();
-            
-            MessageSender.sendWithKeyboard(chatId, response.toString(), keyboard, telegramClient);
-            
+
+            messageSender.sendMessageWithKeyboard(chatId, response.toString(), keyboard);
+
         } catch (Exception e) {
-            System.out.println("Errore ricerca farmaco: " + e.getMessage());
-            MessageSender.send(chatId, "❌ Errore durante la ricerca. Riprova più tardi.", telegramClient);
+            System.out.println("Errore ricerca: " + e.getMessage());
+            messageSender.sendMessage(chatId, "❌ Errore durante la ricerca.");
         }
     }
-    
-    /**
-     * Formatta le informazioni di un farmaco.
-     */
-    private String formatDrug(Drug drug, int index) {
+
+    /*Formatta le informazioni di un farmaco in modo leggibile
+    Mostra: nome, principio attivo, produttore, indicazioni terapeutiche*/
+    private String formatDrugInfo(Drug drug, int index) {
         StringBuilder sb = new StringBuilder();
         sb.append(String.format("<b>%d. %s</b>\n", index, drug.getBrandName()));
-        
+
+        //Aggiunge il nome generico se disponibile
         if (drug.getGenericName() != null && !drug.getGenericName().isEmpty()) {
             sb.append(String.format("   📋 <i>Principio attivo:</i> %s\n", drug.getGenericName()));
         }
-        
+
+        //Aggiunge il produttore se disponibile
         if (drug.getManufacturer() != null && !drug.getManufacturer().isEmpty()) {
             sb.append(String.format("   🏭 <i>Produttore:</i> %s\n", drug.getManufacturer()));
         }
-        
+
+        //Aggiunge le indicazioni terapeutiche se disponibili
         if (drug.getIndications() != null && !drug.getIndications().isEmpty()) {
             String indications = formatIndications(drug.getIndications());
             sb.append("   💊 <i>Indicazioni:</i>\n");
             sb.append(indications);
         }
-        
+
         return sb.toString();
     }
-    
-    /**
-     * Formatta le indicazioni terapeutiche in modo leggibile.
-     */
-    private String formatIndications(String rawIndications) {
-        String text = rawIndications.replaceAll("\\s+", " ").trim();
+
+    /*Formatta le indicazioni terapeutiche in modo leggibile
+    Divide il testo in frasi e limita a 300 caratteri per evitare messaggi troppo lunghi*/
+    private String formatIndications(String raw) {
+        //Rimuove spazi multipli e normalizza il testo
+        String text = raw.replaceAll("\\s+", " ").trim();
+        //Divide in frasi usando i delimitatori comuni
         String[] sentences = text.split("(?<=[.!?])\\s+");
-        
+
         StringBuilder formatted = new StringBuilder();
         int charCount = 0;
-        int maxChars = 300;
-        
+
+        //Aggiunge frasi fino al limite di 300 caratteri
         for (String sentence : sentences) {
-            if (charCount + sentence.length() > maxChars) {
+            if (charCount + sentence.length() > 300) {
                 formatted.append("   ...\n");
                 break;
             }
             formatted.append("   • ").append(sentence.trim()).append("\n");
             charCount += sentence.length();
         }
-        
+
         return formatted.toString();
     }
-    
-    /**
-     * Registra una ricerca effettuata dall'utente nel database.
-     */
-    private void recordSearch(long chatId, String query) {
-        try (Connection conn = dbManager.getConnection()) {
-            //Inserisce nella tabella searches
-            try (PreparedStatement pstmt = conn.prepareStatement(
-                    "INSERT INTO searches (telegram_id, query_text) VALUES (?, ?)")) {
-                pstmt.setLong(1, chatId);
-                pstmt.setString(2, query);
-                pstmt.executeUpdate();
-            }
-            
-            //Incrementa il contatore nell'utente
-            try (PreparedStatement pstmt = conn.prepareStatement(
-                    "UPDATE users SET search_count = search_count + 1, last_active = CURRENT_TIMESTAMP WHERE telegram_id = ?")) {
-                pstmt.setLong(1, chatId);
-                pstmt.executeUpdate();
-            }
-        } catch (Exception e) {
-            System.out.println("Errore registrazione ricerca: " + e.getMessage());
-        }
-    }
-    
+
     @Override
     public String getCommandName() {
         return "cerca";

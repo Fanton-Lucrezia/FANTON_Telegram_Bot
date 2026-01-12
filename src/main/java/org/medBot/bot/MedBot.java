@@ -18,11 +18,11 @@ import java.util.Map;
 public class MedBot implements LongPollingSingleThreadUpdateConsumer {
     private final TelegramClient telegramClient;
     private final MessageSender messageSender;
-    private final CommandHandler commandHandler;
+    private final CommandDispatcher commandDispatcher;
     private final DatabaseManager dbManager;
     
-    //Mappa che memorizza gli utenti in attesa di completare un comando
-    //Chiave: chatId dell'utente, Valore: comando in attesa (es. "cerca", "richiami")
+    /*Mappa che memorizza gli utenti in attesa di completare un comando
+    Chiave: chatId dell'utente, Valore: comando in attesa (es. "cerca", "richiami")*/
     private final Map<Long, String> waitingForInput = new HashMap<>();
 
     //Costruttore: inizializza il bot e tutti i suoi componenti
@@ -36,8 +36,8 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
         //Inizializza l'helper per l'invio dei messaggi
         this.messageSender = new MessageSender(telegramClient);
         
-        //Inizializza il gestore dei comandi che contiene la logica dei vari comandi
-        this.commandHandler = new CommandHandler(messageSender);
+        //Inizializza il dispatcher che gestisce il routing dei comandi agli handler
+        this.commandDispatcher = new CommandDispatcher(messageSender);
         
         //Ottiene l'istanza del database manager
         this.dbManager = DatabaseManager.getInstance();
@@ -45,8 +45,8 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
         System.out.println("Bot avviato");
     }
 
-    //Metodo chiamato automaticamente ogni volta che arriva un aggiornamento da Telegram
-    //Può essere un messaggio di testo, un callback da un bottone, ecc.
+    /*Metodo chiamato automaticamente ogni volta che arriva un aggiornamento da Telegram
+    Può essere un messaggio di testo, un callback da un bottone, ecc.*/
     @Override
     public void consume(Update update) {
         //Controlla se l'aggiornamento contiene un messaggio di testo
@@ -59,8 +59,8 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
             //Registra l'utente nel database (o aggiorna la sua ultima attività)
             registerUser(chatId, username);
 
-            //Controlla se l'utente sta rispondendo a una richiesta di completamento comando
-            //Ad esempio: ha scritto /cerca senza parametri e ora sta inviando il nome del farmaco
+            /*Controlla se l'utente sta rispondendo a una richiesta di completamento comando
+            Ad esempio: ha scritto /cerca senza parametri e ora sta inviando il nome del farmaco*/
             if (waitingForInput.containsKey(chatId)) {
                 handlePendingCommand(chatId, messageText);
                 return;
@@ -79,9 +79,9 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
         }
     }
 
-    //Gestisce la risposta dell'utente quando è in attesa di completare un comando
-    //Questo sistema permette un'interazione più fluida: l'utente può scrivere /cerca
-    //e poi inviare il nome del farmaco in un messaggio separato
+    /*Gestisce la risposta dell'utente quando è in attesa di completare un comando
+    Questo sistema permette un'interazione più fluida: l'utente può scrivere /cerca
+    e poi inviare il nome del farmaco in un messaggio separato*/
     private void handlePendingCommand(long chatId, String input) {
         //Recupera quale comando era in attesa e lo rimuove dalla mappa
         String pendingCommand = waitingForInput.remove(chatId);
@@ -93,18 +93,11 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
         }
 
         //Esegue il comando originale usando l'input fornito come parametro
-        switch (pendingCommand) {
-            case "cerca" -> commandHandler.handleSearchDrug(chatId, input, 0);
-            case "richiami" -> commandHandler.handleRecalls(chatId, input, 0);
-            case "effetticollaterali" -> commandHandler.handleAdverseEvents(chatId, input);
-            case "interazioni" -> commandHandler.handleDrugInteractions(chatId, input);
-            case "bookmarks_add" -> commandHandler.handleBookmarks(chatId, "add " + input);
-            case "bookmarks_remove" -> commandHandler.handleBookmarks(chatId, "remove " + input);
-        }
+        commandDispatcher.handleCommand("/" + pendingCommand, chatId, input, null, telegramClient);
     }
 
-    //Elabora i comandi inviati dall'utente
-    //Separa il comando dai suoi argomenti e chiama il metodo appropriato
+    /*Elabora i comandi inviati dall'utente
+    Separa il comando dai suoi argomenti e lo smista al dispatcher*/
     private void handleCommand(long chatId, String message, String username) {
         //Divide il messaggio in comando e argomenti (massimo 2 parti)
         //Esempio: "/cerca aspirin" -> parts[0]="/cerca", parts[1]="aspirin"
@@ -112,72 +105,51 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
         String command = parts[0].toLowerCase();
         String args = parts.length > 1 ? parts[1].trim() : "";
 
-        //Switch che gestisce ogni comando supportato dal bot
-        switch (command) {
-            case "/start" -> commandHandler.handleStart(chatId, username);
-            case "/help" -> commandHandler.handleHelp(chatId);
-            
-            //Per /cerca: se non ci sono argomenti, chiede il nome del farmaco
-            //altrimenti esegue subito la ricerca
-            case "/cerca" -> {
-                if (args.isEmpty()) {
-                    //Mette l'utente in attesa e chiede il nome del farmaco
-                    waitingForInput.put(chatId, "cerca");
-                    messageSender.sendMessage(chatId, "📝 <b>Inserisci il nome del farmaco da cercare:</b>\n\n" +
-                            "💡 Esempio: aspirin, ibuprofen");
-                } else {
-                    commandHandler.handleSearchDrug(chatId, args, 0);
-                }
-            }
-            
-            //Per /richiami: stessa logica di /cerca
-            case "/richiami" -> {
-                if (args.isEmpty()) {
-                    waitingForInput.put(chatId, "richiami");
-                    messageSender.sendMessage(chatId, "📝 <b>Inserisci il nome del farmaco o 'all':</b>\n\n" +
-                            "💡 Esempi:\n" +
-                            "• aspirin (per un farmaco specifico)\n" +
-                            "• all (per tutti gli ultimi richiami)");
-                } else {
-                    commandHandler.handleRecalls(chatId, args, 0);
-                }
-            }
-            
-            //Per /effetticollaterali: chiede il farmaco se non specificato
-            case "/effetticollaterali" -> {
-                if (args.isEmpty()) {
-                    waitingForInput.put(chatId, "effetticollaterali");
-                    messageSender.sendMessage(chatId, "📝 <b>Inserisci il nome del farmaco:</b>\n\n" +
-                            "💡 Esempio: aspirin, ibuprofen");
-                } else {
-                    commandHandler.handleAdverseEvents(chatId, args);
-                }
-            }
-            
-            //Per /interazioni: chiede i farmaci se non specificati
-            case "/interazioni" -> {
-                if (args.isEmpty()) {
-                    waitingForInput.put(chatId, "interazioni");
-                    messageSender.sendMessage(chatId, "📝 <b>Inserisci i farmaci separati da +:</b>\n\n" +
-                            "💡 Esempio: aspirin + ibuprofen");
-                } else {
-                    commandHandler.handleDrugInteractions(chatId, args);
-                }
-            }
-            
-            //Comandi semplici che non richiedono parametri aggiuntivi
-            case "/mystats" -> commandHandler.handleMyStats(chatId);
-            case "/recenti" -> commandHandler.handleRecentSearches(chatId);
-            case "/bookmarks" -> commandHandler.handleBookmarks(chatId, args);
-            case "/statistiche" -> commandHandler.handleGlobalStats(chatId);
-            
-            //Se il comando non è riconosciuto, informa l'utente
-            default -> messageSender.sendMessage(chatId, "❓ Comando sconosciuto. Usa /help");
+        //Gestisce i comandi speciali che richiedono input interattivo
+        if (args.isEmpty() && requiresArgs(command)) {
+            //Mette l'utente in attesa e chiede l'input necessario
+            waitingForInput.put(chatId, command.replace("/", ""));
+            sendInputPrompt(chatId, command);
+            return;
+        }
+
+        //Gestisce il comando /statistiche che è un alias di /mystats con args "global"
+        if (command.equals("/statistiche")) {
+            commandDispatcher.handleCommand("/mystats", chatId, "global", username, telegramClient);
+            return;
+        }
+
+        //Delega al dispatcher che instrada al handler appropriato
+        boolean handled = commandDispatcher.handleCommand(command, chatId, args, username, telegramClient);
+        
+        //Se il comando non esiste, informa l'utente
+        if (!handled) {
+            messageSender.sendMessage(chatId, "❓ Comando sconosciuto. Usa /help");
         }
     }
 
-    //Gestisce i callback query, cioè i click sui bottoni inline
-    //I bottoni inline sono quelli che appaiono sotto i messaggi del bot
+    //Verifica se un comando richiede argomenti obbligatori
+    private boolean requiresArgs(String command) {
+        return command.equals("/cerca") || 
+               command.equals("/richiami") || 
+               command.equals("/effetticollaterali") || 
+               command.equals("/interazioni");
+    }
+
+    //Invia il messaggio appropriato per richiedere l'input necessario
+    private void sendInputPrompt(long chatId, String command) {
+        String prompt = switch (command) {
+            case "/cerca" -> "📝 <b>Inserisci il nome del farmaco da cercare:</b>\n\n💡 Esempio: aspirin, ibuprofen";
+            case "/richiami" -> "📝 <b>Inserisci il nome del farmaco o 'all':</b>\n\n💡 Esempi:\n• aspirin (per un farmaco specifico)\n• all (per tutti gli ultimi richiami)";
+            case "/effetticollaterali" -> "📝 <b>Inserisci il nome del farmaco:</b>\n\n💡 Esempio: aspirin, ibuprofen";
+            case "/interazioni" -> "📝 <b>Inserisci i farmaci separati da +:</b>\n\n💡 Esempio: aspirin + ibuprofen";
+            default -> "📝 Inserisci i parametri richiesti:";
+        };
+        messageSender.sendMessage(chatId, prompt);
+    }
+
+    /*Gestisce i callback query, cioè i click sui bottoni inline
+    I bottoni inline sono quelli che appaiono sotto i messaggi del bot*/
     private void handleCallback(Update update) {
         //Estrae i dati dal callback
         String callbackData = update.getCallbackQuery().getData();
@@ -213,28 +185,12 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
             //Ignora errori (messaggio troppo vecchio per essere modificato)
         }
 
-        //Gestisce i diversi tipi di callback in base al prefisso del callbackData
-        if (callbackData.startsWith("recalls:")) {
-            //Estrae il nome del farmaco dopo "recalls:"
-            String drugName = callbackData.substring(8);
-            commandHandler.handleRecalls(chatId, drugName, 0);
-        } else if (callbackData.startsWith("morerecalls:")) {
-            //Per vedere più richiami (paginazione)
-            String[] parts = callbackData.split(":", 3);
-            commandHandler.handleRecalls(chatId, parts[1], Integer.parseInt(parts[2]));
-        } else if (callbackData.startsWith("moredrugs:")) {
-            //Per vedere più risultati di ricerca (paginazione)
-            String[] parts = callbackData.split(":", 3);
-            commandHandler.handleSearchDrug(chatId, parts[1], Integer.parseInt(parts[2]));
-        } else if (callbackData.startsWith("bookmark:")) {
-            //Per salvare un farmaco nei preferiti
-            String drugName = callbackData.substring(9);
-            commandHandler.handleBookmarkAdd(chatId, drugName);
-        }
+        //Delega la gestione del callback al dispatcher
+        commandDispatcher.handleCallback(callbackData, chatId, telegramClient);
     }
 
-    //Registra un utente nel database o aggiorna la sua ultima attività
-    //Questo permette di tenere traccia di chi usa il bot
+    /*Registra un utente nel database o aggiorna la sua ultima attività
+    Questo permette di tenere traccia di chi usa il bot*/
     private void registerUser(long chatId, String username) {
         try (Connection conn = dbManager.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(

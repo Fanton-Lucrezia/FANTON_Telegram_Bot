@@ -1,89 +1,87 @@
 package org.medBot.handler;
 
+import org.medBot.bot.MessageSender;
 import org.medBot.service.OpenFdaService;
-import org.medBot.util.MessageSender;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
-/**
- * Gestisce il comando /interazioni per verificare interazioni tra farmaci.
- */
+/*Gestisce il comando /interazioni per verificare interazioni tra più farmaci
+Cerca nella FDA database eventi avversi riportati quando i farmaci sono usati insieme*/
 public class InteractionsHandler implements CommandHandler {
-    
     private final OpenFdaService fdaService;
-    
-    public InteractionsHandler(OpenFdaService fdaService) {
+    private final MessageSender messageSender;
+
+    public InteractionsHandler(OpenFdaService fdaService, MessageSender messageSender) {
         this.fdaService = fdaService;
+        this.messageSender = messageSender;
     }
-    
+
     @Override
-    public void handle(long chatId, String args, TelegramClient telegramClient) {
-        if (args.isEmpty()) {
-            MessageSender.send(chatId, "❌ Specifica i farmaci da confrontare!\n\n" +
-                    "📝 Esempio: <code>/interazioni aspirin + ibuprofen</code>\n\n" +
-                    "💡 <b>Cosa fa:</b>\n" +
-                    "Verifica se due o più farmaci hanno segnalazioni di interazioni " +
-                    "negative quando usati insieme.", telegramClient);
+    public void handle(long chatId, String args, String username, TelegramClient telegramClient) {
+        //Validazione input base
+        if (args == null || args.isEmpty()) {
+            messageSender.sendMessage(chatId, "❌ Specifica i farmaci separati da +\n\n" +
+                    "📝 Esempio corretto: <code>/interazioni aspirin + ibuprofen</code>");
             return;
         }
-        
-        //Divide i farmaci usando il separatore +
+
+        //Divide i farmaci usando il simbolo +
         String[] drugs = args.split("\\+");
         if (drugs.length < 2) {
-            MessageSender.send(chatId, "❌ Specifica almeno due farmaci separati da +\n\n" +
-                    "Esempio: <code>/interazioni aspirin + ibuprofen</code>", telegramClient);
+            messageSender.sendMessage(chatId, "❌ Specifica almeno due farmaci separati da +\n\n" +
+                    "📝 Esempio corretto: <code>/interazioni aspirin + ibuprofen</code>");
             return;
         }
-        
-        //Pulisce i nomi dei farmaci
+
+        //Pulisce gli spazi e valida ogni singolo farmaco
         for (int i = 0; i < drugs.length; i++) {
             drugs[i] = drugs[i].trim();
-        }
-        
-        MessageSender.send(chatId, "🔍 Verifico interazioni tra: " + String.join(", ", drugs) + "...", 
-                telegramClient);
-        
-        try {
-            var interactions = fdaService.checkDrugInteractions(drugs);
-            
-            if (interactions.isEmpty() || ((Number) interactions.get("count")).intValue() == 0) {
-                MessageSender.send(chatId, "✅ <b>Nessuna interazione grave segnalata</b>\n\n" +
-                        "Non ci sono segnalazioni recenti di eventi avversi gravi " +
-                        "quando questi farmaci vengono usati insieme.\n\n" +
-                        "⚠️ <i>Importante: Consulta sempre un medico o farmacista.</i>", telegramClient);
+            if (drugs[i].isEmpty() || drugs[i].length() < 2) {
+                messageSender.sendMessage(chatId, "❌ Uno o più nomi di farmaci non sono validi.\n\n" +
+                        "📝 Esempio corretto: <code>/interazioni aspirin + ibuprofen</code>");
                 return;
             }
-            
+        }
+
+        messageSender.sendMessage(chatId, "🔍 Verifico interazioni...");
+
+        try {
+            //Chiama l'API per cercare eventi avversi con tutti i farmaci insieme
+            var interactions = fdaService.checkDrugInteractions(drugs);
+
+            //Se non trova interazioni significative, è una buona notizia
+            if (interactions.isEmpty() || ((Number) interactions.get("count")).intValue() == 0) {
+                messageSender.sendMessage(chatId, "✅ <b>Nessuna interazione grave segnalata</b>\n\n" +
+                        "⚠️ <i>Consulta sempre un medico.</i>");
+                return;
+            }
+
+            //Costruisce la risposta con le interazioni trovate
             int count = ((Number) interactions.get("count")).intValue();
             StringBuilder response = new StringBuilder();
             response.append("⚠️ <b>POSSIBILI INTERAZIONI</b>\n\n");
             response.append("Farmaci: ").append(String.join(" + ", drugs)).append("\n\n");
-            response.append(String.format("📊 <b>%d segnalazioni</b> di eventi avversi " +
-                    "quando questi farmaci sono usati insieme.\n\n", count));
-            
-            //Mostra le reazioni più comuni nelle interazioni
+            response.append(String.format("📊 <b>%d segnalazioni</b> di eventi avversi.\n\n", count));
+
+            //Mostra le reazioni più comuni quando i farmaci sono presi insieme
             @SuppressWarnings("unchecked")
             var commonReactions = (java.util.List<String>) interactions.get("commonReactions");
             if (commonReactions != null && !commonReactions.isEmpty()) {
-                response.append("<b>🔴 Reazioni più comuni:</b>\n");
+                response.append("<b>🔴 Reazioni comuni:</b>\n");
+                //Mostra al massimo 8 reazioni
                 for (int i = 0; i < Math.min(8, commonReactions.size()); i++) {
                     response.append("• ").append(commonReactions.get(i)).append("\n");
                 }
-                response.append("\n");
             }
-            
-            response.append("🚨 <b>IMPORTANTE:</b>\n");
-            response.append("• NON interrompere i farmaci senza consultare un medico\n");
-            response.append("• Consulta un medico o farmacista per informazioni accurate\n\n");
-            response.append("<i>Fonte: FDA Adverse Event Reporting System</i>");
-            
-            MessageSender.send(chatId, response.toString(), telegramClient);
-            
+
+            response.append("\n🚨 Consulta un medico per informazioni accurate.");
+            messageSender.sendMessage(chatId, response.toString());
+
         } catch (Exception e) {
-            System.out.println("Errore verifica interazioni: " + e.getMessage());
-            MessageSender.send(chatId, "❌ Errore durante la verifica delle interazioni.", telegramClient);
+            System.out.println("Errore interazioni: " + e.getMessage());
+            messageSender.sendMessage(chatId, "❌ Errore durante la verifica.");
         }
     }
-    
+
     @Override
     public String getCommandName() {
         return "interazioni";

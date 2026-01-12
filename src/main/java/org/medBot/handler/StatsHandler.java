@@ -1,85 +1,52 @@
 package org.medBot.handler;
 
-import org.medBot.dao.DatabaseManager;
-import org.medBot.util.MessageSender;
+import org.medBot.bot.MessageSender;
+import org.medBot.service.StatisticsService;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-
-/**
- * Gestisce il comando /mystats per mostrare le statistiche personali.
- */
+//Gestisce i comandi per le statistiche (/mystats e /statistiche)
 public class StatsHandler implements CommandHandler {
-    
-    private final DatabaseManager dbManager;
-    
-    public StatsHandler(DatabaseManager dbManager) {
-        this.dbManager = dbManager;
+    private final StatisticsService statsService;
+    private final MessageSender messageSender;
+
+    public StatsHandler(StatisticsService statsService, MessageSender messageSender) {
+        this.statsService = statsService;
+        this.messageSender = messageSender;
     }
-    
+
     @Override
-    public void handle(long chatId, String args, TelegramClient telegramClient) {
+    public void handle(long chatId, String args, String username, TelegramClient telegramClient) {
+        //Se viene chiamato con "global" o "statistiche", mostra stats globali
+        //Altrimenti mostra le stats personali dell'utente
+        if ("global".equalsIgnoreCase(args)) {
+            handleGlobalStats(chatId);
+        } else {
+            handleMyStats(chatId);
+        }
+    }
+
+    //Gestisce il comando /mystats per mostrare le statistiche personali dell'utente
+    public void handleMyStats(long chatId) {
         try {
-            int searchCount = getSearchCount(chatId);
-            
-            //Ottiene i farmaci più cercati dall'utente
-            StringBuilder topDrugs = new StringBuilder();
-            try (Connection conn = dbManager.getConnection();
-                 PreparedStatement pstmt = conn.prepareStatement(
-                         "SELECT query_text, COUNT(*) as count FROM searches " +
-                                 "WHERE telegram_id = ? " +
-                                 "GROUP BY LOWER(query_text) " +
-                                 "ORDER BY count DESC LIMIT 5")) {
-                
-                pstmt.setLong(1, chatId);
-                ResultSet rs = pstmt.executeQuery();
-                
-                int rank = 1;
-                while (rs.next()) {
-                    topDrugs.append(String.format("%d. %s (%d volte)\n",
-                            rank++, rs.getString("query_text"), rs.getInt("count")));
-                }
-            }
-            
-            String response = String.format(
-                    "📊 <b>Le tue statistiche:</b>\n\n" +
-                            "🔍 Ricerche totali: <b>%d</b>\n" +
-                            "👤 ID Telegram: <code>%d</code>\n\n",
-                    searchCount, chatId);
-            
-            if (topDrugs.length() > 0) {
-                response += "💊 <b>Farmaci più cercati:</b>\n" + topDrugs + "\n";
-            }
-            
-            response += "💡 Usa /recenti per le ultime ricerche!";
-            MessageSender.send(chatId, response, telegramClient);
-            
+            String stats = statsService.getUserStats(chatId);
+            messageSender.sendMessage(chatId, stats);
         } catch (Exception e) {
             System.out.println("Errore statistiche: " + e.getMessage());
-            MessageSender.send(chatId, "❌ Errore nel recuperare le statistiche.", telegramClient);
+            messageSender.sendMessage(chatId, "❌ Errore nel recuperare le statistiche.");
         }
     }
-    
-    /**
-     * Ottiene il numero totale di ricerche dell'utente.
-     */
-    private int getSearchCount(long chatId) {
-        try (Connection conn = dbManager.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(
-                     "SELECT search_count FROM users WHERE telegram_id = ?")) {
-            pstmt.setLong(1, chatId);
-            ResultSet rs = pstmt.executeQuery();
-            if (rs.next()) {
-                return rs.getInt("search_count");
-            }
+
+    //Gestisce il comando /statistiche per mostrare statistiche globali del bot
+    public void handleGlobalStats(long chatId) {
+        try {
+            String stats = statsService.getGlobalStats();
+            messageSender.sendMessage(chatId, stats);
         } catch (Exception e) {
-            System.out.println("Errore conteggio ricerche: " + e.getMessage());
+            System.out.println("Errore statistiche globali: " + e.getMessage());
+            messageSender.sendMessage(chatId, "❌ Errore nel recuperare le statistiche.");
         }
-        return 0;
     }
-    
+
     @Override
     public String getCommandName() {
         return "mystats";

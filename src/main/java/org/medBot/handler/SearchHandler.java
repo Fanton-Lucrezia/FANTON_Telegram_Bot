@@ -10,13 +10,20 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 //Gestisce il comando /cerca per la ricerca di farmaci nelle API FDA
 public class SearchHandler implements CommandHandler {
     private final OpenFdaService fdaService;
     private final StatisticsService statsService;
     private final MessageSender messageSender;
+    
+    /*Cache temporanea dei risultati di ricerca per supportare la paginazione
+    Chiave: chatId, Valore: lista completa dei farmaci trovati
+    Questo permette di mostrare i risultati successivi senza richiamare l'API*/
+    private final Map<Long, List<Drug>> searchCache = new HashMap<>();
 
     public SearchHandler(OpenFdaService fdaService, StatisticsService statsService, MessageSender messageSender) {
         this.fdaService = fdaService;
@@ -46,73 +53,88 @@ public class SearchHandler implements CommandHandler {
             return;
         }
 
-        //Solo alla prima pagina (offset=0) mostra messaggio di caricamento e registra la ricerca
+        List<Drug> drugs;
+        
+        //Se offset è 0, è una nuova ricerca: chiama l'API e salva in cache
         if (offset == 0) {
             messageSender.sendMessage(chatId, "🔍 Cerco \"" + drugName + "\"...");
             statsService.recordSearch(chatId, drugName);
-        }
-
-        try {
-            //Chiama il servizio FDA per ottenere i risultati
-            List<Drug> drugs = fdaService.searchDrug(drugName);
-
-            //Se non trova nulla, informa l'utente
-            if (drugs.isEmpty()) {
-                messageSender.sendMessage(chatId, "❌ Nessun risultato per \"" + drugName + "\".\n\n" +
-                        "💡 Prova con il nome generico o in inglese.");
+            
+            try {
+                //Chiama il servizio FDA per ottenere i risultati
+                drugs = fdaService.searchDrug(drugName);
+                
+                //Se non trova nulla, informa l'utente
+                if (drugs.isEmpty()) {
+                    messageSender.sendMessage(chatId, "❌ Nessun risultato per \"" + drugName + "\".\n\n" +
+                            "💡 Prova con il nome generico o in inglese.");
+                    return;
+                }
+                
+                //Salva i risultati in cache per la paginazione
+                searchCache.put(chatId, drugs);
+                
+            } catch (Exception e) {
+                System.out.println("Errore ricerca: " + e.getMessage());
+                messageSender.sendMessage(chatId, "❌ Errore durante la ricerca.");
                 return;
             }
-
-            //Paginazione: mostra 3 risultati per volta
-            int pageSize = 3;
-            int end = Math.min(offset + pageSize, drugs.size());
-
-            //Costruisce la risposta formattata
-            StringBuilder response = new StringBuilder();
-            response.append(String.format("✅ <b>%d risultati</b> per \"%s\":\n\n",
-                    drugs.size(), drugName));
-
-            //Formatta ogni farmaco della pagina corrente
-            for (int i = offset; i < end; i++) {
-                response.append(formatDrugInfo(drugs.get(i), i + 1));
-                if (i < end - 1) response.append("\n➖➖➖\n\n");
+        } else {
+            //Se offset > 0, recupera i risultati dalla cache
+            drugs = searchCache.get(chatId);
+            
+            //Se la cache non esiste più, chiede di rifare la ricerca
+            if (drugs == null || drugs.isEmpty()) {
+                messageSender.sendMessage(chatId, "❌ Risultati scaduti. Riprova la ricerca con <code>/cerca " + drugName + "</code>");
+                return;
             }
-
-            //Crea i bottoni inline per azioni rapide
-            List<InlineKeyboardRow> rows = new ArrayList<>();
-
-            //Se ci sono altri risultati, aggiunge il bottone "Altri risultati"
-            if (end < drugs.size()) {
-                InlineKeyboardButton moreButton = InlineKeyboardButton.builder()
-                        .text(String.format("⬇️ Altri %d risultati", drugs.size() - end))
-                        .callbackData("moredrugs:" + drugName + ":" + end)
-                        .build();
-                rows.add(new InlineKeyboardRow(moreButton));
-            }
-
-            //Riga di bottoni per azioni (Richiami e Salva)
-            InlineKeyboardRow actionsRow = new InlineKeyboardRow();
-            actionsRow.add(InlineKeyboardButton.builder()
-                    .text("🔍 Richiami")
-                    .callbackData("recalls:" + drugName)
-                    .build());
-            actionsRow.add(InlineKeyboardButton.builder()
-                    .text("⭐ Salva")
-                    .callbackData("bookmark:" + drugName)
-                    .build());
-            rows.add(actionsRow);
-
-            //Crea la tastiera inline con tutti i bottoni
-            InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
-                    .keyboard(rows)
-                    .build();
-
-            messageSender.sendMessageWithKeyboard(chatId, response.toString(), keyboard);
-
-        } catch (Exception e) {
-            System.out.println("Errore ricerca: " + e.getMessage());
-            messageSender.sendMessage(chatId, "❌ Errore durante la ricerca.");
         }
+
+        //Paginazione: mostra 3 risultati per volta
+        int pageSize = 3;
+        int end = Math.min(offset + pageSize, drugs.size());
+
+        //Costruisce la risposta formattata
+        StringBuilder response = new StringBuilder();
+        response.append(String.format("✅ <b>%d risultati</b> per \"%s\":\n\n",
+                drugs.size(), drugName));
+
+        //Formatta ogni farmaco della pagina corrente
+        for (int i = offset; i < end; i++) {
+            response.append(formatDrugInfo(drugs.get(i), i + 1));
+            if (i < end - 1) response.append("\n➖➖➖\n\n");
+        }
+
+        //Crea i bottoni inline per azioni rapide
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+
+        //Se ci sono altri risultati, aggiunge il bottone "Altri risultati"
+        if (end < drugs.size()) {
+            InlineKeyboardButton moreButton = InlineKeyboardButton.builder()
+                    .text(String.format("⬇️ Altri %d risultati", drugs.size() - end))
+                    .callbackData("moredrugs:" + drugName + ":" + end)
+                    .build();
+            rows.add(new InlineKeyboardRow(moreButton));
+        }
+
+        //Riga di bottoni per azioni (Richiami e Salva)
+        InlineKeyboardRow actionsRow = new InlineKeyboardRow();
+        actionsRow.add(InlineKeyboardButton.builder()
+                .text("🔍 Richiami")
+                .callbackData("recalls:" + drugName)
+                .build());
+        actionsRow.add(InlineKeyboardButton.builder()
+                .text("⭐ Salva")
+                .callbackData("bookmark:" + drugName)
+                .build());
+        rows.add(actionsRow);
+
+        //Crea la tastiera inline con tutti i bottoni
+        InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
+                .keyboard(rows)
+                .build();
+
+        messageSender.sendMessageWithKeyboard(chatId, response.toString(), keyboard);
     }
 
     /*Formatta le informazioni di un farmaco in modo leggibile

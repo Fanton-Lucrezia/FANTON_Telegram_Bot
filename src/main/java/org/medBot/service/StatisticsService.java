@@ -43,7 +43,7 @@ public class StatisticsService {
     }
 
     /*Restituisce le statistiche personali dell'utente
-    Include: numero di ricerche, farmaco più cercato, giorni di utilizzo*/
+    Include: numero di ricerche, farmaco più cercato*/
     public String getUserStats(long chatId) {
         try (Connection conn = dbManager.getConnection()) {
             //Recupera il numero totale di ricerche dell'utente
@@ -77,26 +77,13 @@ public class StatisticsService {
                 }
             }
 
-            //Calcola quanti giorni è passato dalla prima ricerca
-            int daysActive = 0;
-            try (PreparedStatement pstmt = conn.prepareStatement(
-                    "SELECT CAST((julianday('now') - julianday(MIN(created_at))) AS INTEGER) as days " +
-                            "FROM searches WHERE telegram_id = ?")) {
-                pstmt.setLong(1, chatId);
-                ResultSet rs = pstmt.executeQuery();
-                if (rs.next()) {
-                    daysActive = rs.getInt("days");
-                }
-            }
-
-            //Costruisce la risposta formattata con tutte le statistiche
+            //Costruisce la risposta formattata con le statistiche
             return String.format(
                     "📊 <b>Le Tue Statistiche</b>\n\n" +
                             "🔍 Ricerche totali: <b>%d</b>\n" +
-                            "⭐ Farmaco preferito: <b>%s</b> (%d volte)\n" +
-                            "📅 Giorni attivo: <b>%d</b>\n\n" +
+                            "⭐ Farmaco preferito: <b>%s</b> (%d volte)\n\n" +
                             "💡 Usa <code>/recenti</code> per vedere le tue ultime ricerche.",
-                    totalSearches, topDrug, topCount, daysActive);
+                    totalSearches, topDrug, topCount);
 
         } catch (Exception e) {
             System.out.println("Errore statistiche utente: " + e.getMessage());

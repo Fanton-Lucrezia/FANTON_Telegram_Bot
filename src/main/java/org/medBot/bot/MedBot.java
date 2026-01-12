@@ -152,7 +152,7 @@ public class MedBot implements LongPollingSingleThreadUpdateConsumer {
             //Non fa nulla, il bottone è già disabilitato visivamente
             try {
                 telegramClient.execute(
-                    org.telegram.telegrambots.meta.api.methods.answerCallbackQuery.AnswerCallbackQuery.builder()
+                    org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery.builder()
                         .callbackQueryId(update.getCallbackQuery().getId())
                         .text("ℹ️ Già nei preferiti")
                         .showAlert(false)

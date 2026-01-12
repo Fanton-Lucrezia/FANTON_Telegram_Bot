@@ -6,9 +6,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Gestisce le statistiche degli utenti.
@@ -26,7 +24,7 @@ public class StatisticsService {
     public void recordSearch(long chatId, String searchTerm) {
         try (Connection conn = dbManager.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(
-                     "INSERT INTO search_history (telegram_id, search_term) VALUES (?, ?)")) {
+                     "INSERT INTO searches (telegram_id, query_text) VALUES (?, ?)")) {
             pstmt.setLong(1, chatId);
             pstmt.setString(2, searchTerm);
             pstmt.executeUpdate();
@@ -44,7 +42,7 @@ public class StatisticsService {
         try (Connection conn = dbManager.getConnection()) {
             //Conta totale ricerche
             try (PreparedStatement pstmt = conn.prepareStatement(
-                    "SELECT COUNT(*) FROM search_history WHERE telegram_id = ?")) {
+                    "SELECT COUNT(*) FROM searches WHERE telegram_id = ?")) {
                 pstmt.setLong(1, chatId);
                 ResultSet rs = pstmt.executeQuery();
                 if (rs.next()) {
@@ -64,13 +62,13 @@ public class StatisticsService {
 
             //Farmaco più cercato
             try (PreparedStatement pstmt = conn.prepareStatement(
-                    "SELECT search_term, COUNT(*) as count FROM search_history " +
-                            "WHERE telegram_id = ? GROUP BY search_term ORDER BY count DESC LIMIT 1")) {
+                    "SELECT query_text, COUNT(*) as count FROM searches " +
+                            "WHERE telegram_id = ? GROUP BY query_text ORDER BY count DESC LIMIT 1")) {
                 pstmt.setLong(1, chatId);
                 ResultSet rs = pstmt.executeQuery();
                 if (rs.next()) {
                     response.append("\n🏆 Farmaco più cercato: <b>")
-                            .append(rs.getString("search_term"))
+                            .append(rs.getString("query_text"))
                             .append("</b> (").append(rs.getInt("count")).append(" volte)");
                 }
             }
@@ -97,7 +95,7 @@ public class StatisticsService {
 
             //Ricerche totali
             try (PreparedStatement pstmt = conn.prepareStatement(
-                    "SELECT COUNT(*) FROM search_history")) {
+                    "SELECT COUNT(*) FROM searches")) {
                 ResultSet rs = pstmt.executeQuery();
                 if (rs.next()) {
                     response.append("🔍 Ricerche totali: <b>").append(rs.getInt(1)).append("</b>\n");
@@ -116,13 +114,19 @@ public class StatisticsService {
             //Top 5 farmaci più cercati
             response.append("<b>🔥 Top 5 farmaci più cercati:</b>\n");
             try (PreparedStatement pstmt = conn.prepareStatement(
-                    "SELECT search_term, COUNT(*) as count FROM search_history " +
-                            "GROUP BY search_term ORDER BY count DESC LIMIT 5")) {
+                    "SELECT query_text, COUNT(*) as count FROM searches " +
+                            "GROUP BY query_text ORDER BY count DESC LIMIT 5")) {
                 ResultSet rs = pstmt.executeQuery();
                 int position = 1;
+                boolean hasResults = false;
                 while (rs.next()) {
+                    hasResults = true;
                     response.append(String.format("%d. %s (%d ricerche)\n",
-                            position++, rs.getString("search_term"), rs.getInt("count")));
+                            position++, rs.getString("query_text"), rs.getInt("count")));
+                }
+                
+                if (!hasResults) {
+                    response.append("<i>Nessuna ricerca effettuata ancora</i>\n");
                 }
             }
 
@@ -138,12 +142,12 @@ public class StatisticsService {
 
         try (Connection conn = dbManager.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(
-                     "SELECT DISTINCT search_term FROM search_history " +
+                     "SELECT DISTINCT query_text FROM searches " +
                              "WHERE telegram_id = ? ORDER BY created_at DESC LIMIT 10")) {
             pstmt.setLong(1, chatId);
             ResultSet rs = pstmt.executeQuery();
             while (rs.next()) {
-                searches.add(rs.getString("search_term"));
+                searches.add(rs.getString("query_text"));
             }
         }
 

@@ -1,5 +1,6 @@
 package org.medBot.dao;
 
+import java.io.File;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -31,6 +32,10 @@ public class DatabaseManager {
     /*Inizializza il database creando tutte le tabelle necessarie
     Se le tabelle esistono già, non fa nulla grazie a CREATE TABLE IF NOT EXISTS*/
     public void initializeDatabase() {
+        //Mostra il percorso assoluto del database per debug
+        File dbFile = new File("medbot.db");
+        System.out.println("💾 Database location: " + dbFile.getAbsolutePath());
+        
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement()) {
 
@@ -76,7 +81,7 @@ public class DatabaseManager {
                             "last_fetched TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
                             ")");
 
-            System.out.println("✓ Database inizializzato");
+            System.out.println("✓ Database inizializzato con successo");
 
         } catch (SQLException e) {
             System.err.println("Errore inizializzazione database: " + e.getMessage());

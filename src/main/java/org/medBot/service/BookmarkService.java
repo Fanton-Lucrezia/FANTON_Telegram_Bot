@@ -21,10 +21,7 @@ public class BookmarkService {
     /*Aggiunge un farmaco ai preferiti dell'utente
     Se il bookmark esiste già, non fa nulla grazie a INSERT OR IGNORE*/
     public void addBookmark(long chatId, String drugName) {
-        System.out.println("💾 [BOOKMARK] Aggiunta: chatId=" + chatId + ", drug=" + drugName);
-        
         try (Connection conn = dbManager.getConnection()) {
-            //Disabilita l'autocommit per controllo manuale della transazione
             conn.setAutoCommit(false);
             
             try (PreparedStatement pstmt = conn.prepareStatement(
@@ -32,30 +29,22 @@ public class BookmarkService {
 
                 pstmt.setLong(1, chatId);
                 pstmt.setString(2, drugName);
-                int rows = pstmt.executeUpdate();
+                pstmt.executeUpdate();
                 
-                //Forza il commit delle modifiche sul database
                 conn.commit();
                 
-                System.out.println("✅ [BOOKMARK] Salvato (" + rows + " righe inserite)");
-                
             } catch (Exception e) {
-                //In caso di errore, annulla le modifiche
                 conn.rollback();
-                System.out.println("❌ [BOOKMARK] Errore durante insert: " + e.getMessage());
                 throw e;
             }
 
         } catch (Exception e) {
-            System.out.println("❌ [BOOKMARK] Errore aggiunta bookmark: " + e.getMessage());
-            e.printStackTrace();
+            System.out.println("Errore aggiunta bookmark: " + e.getMessage());
         }
     }
 
     //Rimuove un farmaco dai preferiti dell'utente
     public void removeBookmark(long chatId, String drugName) {
-        System.out.println("🗑️ [BOOKMARK] Rimozione: chatId=" + chatId + ", drug=" + drugName);
-        
         try (Connection conn = dbManager.getConnection()) {
             conn.setAutoCommit(false);
             
@@ -64,21 +53,17 @@ public class BookmarkService {
 
                 pstmt.setLong(1, chatId);
                 pstmt.setString(2, drugName);
-                int rows = pstmt.executeUpdate();
+                pstmt.executeUpdate();
                 
                 conn.commit();
                 
-                System.out.println("✅ [BOOKMARK] Rimosso (" + rows + " righe eliminate)");
-                
             } catch (Exception e) {
                 conn.rollback();
-                System.out.println("❌ [BOOKMARK] Errore durante delete: " + e.getMessage());
                 throw e;
             }
 
         } catch (Exception e) {
-            System.out.println("❌ [BOOKMARK] Errore rimozione bookmark: " + e.getMessage());
-            e.printStackTrace();
+            System.out.println("Errore rimozione bookmark: " + e.getMessage());
         }
     }
 
@@ -92,12 +77,10 @@ public class BookmarkService {
             pstmt.setString(2, drugName);
             ResultSet rs = pstmt.executeQuery();
 
-            boolean result = rs.next() && rs.getInt(1) > 0;
-            System.out.println("🔍 [BOOKMARK] Verifica per '" + drugName + "': " + (result ? "TROVATO" : "NON TROVATO"));
-            return result;
+            return rs.next() && rs.getInt(1) > 0;
 
         } catch (Exception e) {
-            System.out.println("❌ [BOOKMARK] Errore verifica bookmark: " + e.getMessage());
+            System.out.println("Errore verifica bookmark: " + e.getMessage());
             return false;
         }
     }
@@ -105,8 +88,6 @@ public class BookmarkService {
     /*Restituisce la lista completa dei preferiti dell'utente formattata
     Se non ha preferiti, restituisce un messaggio appropriato*/
     public String getBookmarks(long chatId) {
-        System.out.println("📋 [BOOKMARK] Recupero lista per chatId=" + chatId);
-        
         try (Connection conn = dbManager.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(
                      "SELECT drug_name, created_at FROM bookmarks WHERE telegram_id = ? ORDER BY created_at DESC")) {
@@ -118,32 +99,29 @@ public class BookmarkService {
             while (rs.next()) {
                 bookmarks.add(rs.getString("drug_name"));
             }
-            
-            System.out.println("✅ [BOOKMARK] Trovati " + bookmarks.size() + " preferiti");
 
             //Se non ci sono preferiti, restituisce un messaggio vuoto
             if (bookmarks.isEmpty()) {
-                return "📋 <b>I Tuoi Preferiti</b>\n\n" +
+                return "<b>I Tuoi Preferiti</b>\n\n" +
                         "Non hai ancora salvato nessun farmaco.\n\n" +
-                        "💡 Usa <code>/bookmarks add &lt;nome&gt;</code> per aggiungere.";
+                        "Usa <code>/bookmarks add &lt;nome&gt;</code> per aggiungere.";
             }
 
             //Costruisce la risposta formattata con tutti i preferiti
             StringBuilder response = new StringBuilder();
-            response.append("📋 <b>I Tuoi Preferiti</b> (").append(bookmarks.size()).append(")\n\n");
+            response.append("<b>I Tuoi Preferiti</b> (").append(bookmarks.size()).append(")\n\n");
 
             for (int i = 0; i < bookmarks.size(); i++) {
                 response.append(i + 1).append(". ").append(bookmarks.get(i)).append("\n");
             }
 
-            response.append("\n💡 Usa <code>/bookmarks remove &lt;nome&gt;</code> per rimuovere.");
+            response.append("\nUsa <code>/bookmarks remove &lt;nome&gt;</code> per rimuovere.");
 
             return response.toString();
 
         } catch (Exception e) {
-            System.out.println("❌ [BOOKMARK] Errore recupero bookmarks: " + e.getMessage());
-            e.printStackTrace();
-            return "❌ Errore nel recuperare i preferiti.";
+            System.out.println("Errore recupero bookmarks: " + e.getMessage());
+            return "Errore nel recuperare i preferiti.";
         }
     }
 }

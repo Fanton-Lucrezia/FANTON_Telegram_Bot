@@ -1,5 +1,7 @@
 package org.medBot.dao;
 
+import org.medBot.MyConfiguration;
+
 import java.io.File;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -10,10 +12,25 @@ import java.sql.Statement;
 Crea e gestisce la connessione al database e inizializza le tabelle necessarie*/
 public class DatabaseManager {
     private static DatabaseManager instance;
-    private static final String DB_URL = "jdbc:sqlite:medbot.db";
+    private final String dbUrl;
 
     //Costruttore privato per impedire istanziazione diretta (pattern Singleton)
-    private DatabaseManager() {}
+    private DatabaseManager() {
+        //Legge il percorso del database da config.properties
+        String dbPath = MyConfiguration.getInstance().getProperty("DB_PATH");
+        if (dbPath == null || dbPath.isEmpty()) {
+            dbPath = "./data/medbot.db";
+        }
+        
+        //Crea la directory data se non esiste
+        File dbFile = new File(dbPath);
+        File parentDir = dbFile.getParentFile();
+        if (parentDir != null && !parentDir.exists()) {
+            parentDir.mkdirs();
+        }
+        
+        this.dbUrl = "jdbc:sqlite:" + dbPath;
+    }
 
     //Restituisce l'unica istanza del DatabaseManager (pattern Singleton)
     public static synchronized DatabaseManager getInstance() {
@@ -26,16 +43,12 @@ public class DatabaseManager {
     /*Restituisce una nuova connessione al database
     Ogni chiamata crea una nuova connessione che deve essere chiusa dopo l'uso*/
     public Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(DB_URL);
+        return DriverManager.getConnection(dbUrl);
     }
 
     /*Inizializza il database creando tutte le tabelle necessarie
     Se le tabelle esistono già, non fa nulla grazie a CREATE TABLE IF NOT EXISTS*/
     public void initializeDatabase() {
-        //Mostra il percorso assoluto del database per debug
-        File dbFile = new File("medbot.db");
-        System.out.println("💾 Database location: " + dbFile.getAbsolutePath());
-        
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement()) {
 
@@ -81,7 +94,7 @@ public class DatabaseManager {
                             "last_fetched TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
                             ")");
 
-            System.out.println("✓ Database inizializzato con successo");
+            System.out.println("Database inizializzato: " + dbUrl);
 
         } catch (SQLException e) {
             System.err.println("Errore inizializzazione database: " + e.getMessage());

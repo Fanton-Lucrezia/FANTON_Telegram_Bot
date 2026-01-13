@@ -41,15 +41,15 @@ public class SearchHandler implements CommandHandler {
     public void handleWithOffset(long chatId, String drugName, int offset, TelegramClient telegramClient) {
         //Validazione input: controlla che il nome sia valido
         if (drugName == null || drugName.isEmpty() || drugName.length() < 2) {
-            messageSender.sendMessage(chatId, "❌ Nome farmaco non valido.\n\n" +
-                    "📝 Esempio corretto: <code>/cerca aspirin</code>");
+            messageSender.sendMessage(chatId, "Nome farmaco non valido.\n\n" +
+                    "Esempio corretto: <code>/cerca aspirin</code>");
             return;
         }
 
         //Controlla se l'utente ha inserito più farmaci separati (non supportato)
         if (drugName.contains(",") || drugName.contains(";")) {
-            messageSender.sendMessage(chatId, "❌ Specifica un solo farmaco per volta.\n\n" +
-                    "📝 Esempio corretto: <code>/cerca aspirin</code>");
+            messageSender.sendMessage(chatId, "Specifica un solo farmaco per volta.\n\n" +
+                    "Esempio corretto: <code>/cerca aspirin</code>");
             return;
         }
 
@@ -57,7 +57,7 @@ public class SearchHandler implements CommandHandler {
         
         //Se offset è 0, è una nuova ricerca: chiama l'API e salva in cache
         if (offset == 0) {
-            messageSender.sendMessage(chatId, "🔍 Cerco \"" + drugName + "\"...");
+            messageSender.sendMessage(chatId, "Cerco \"" + drugName + "\"...");
             statsService.recordSearch(chatId, drugName);
             
             try {
@@ -66,18 +66,16 @@ public class SearchHandler implements CommandHandler {
                 
                 //Se non trova nulla, informa l'utente
                 if (drugs.isEmpty()) {
-                    messageSender.sendMessage(chatId, "❌ Nessun risultato per \"" + drugName + "\".\n\n" +
-                            "💡 Prova con il nome generico o in inglese.");
+                    messageSender.sendMessage(chatId, "Nessun risultato per \"" + drugName + "\".\n\n" +
+                            "Prova con il nome generico o in inglese.");
                     return;
                 }
                 
                 //Salva i risultati in cache per la paginazione
                 searchCache.put(chatId, drugs);
-                System.out.println("✅ Salvati " + drugs.size() + " risultati in cache per chatId " + chatId);
                 
             } catch (Exception e) {
-                System.out.println("Errore ricerca: " + e.getMessage());
-                messageSender.sendMessage(chatId, "❌ Errore durante la ricerca.");
+                messageSender.sendMessage(chatId, "Errore durante la ricerca.");
                 return;
             }
         } else {
@@ -86,28 +84,24 @@ public class SearchHandler implements CommandHandler {
             
             //Se la cache non esiste più, chiede di rifare la ricerca
             if (drugs == null || drugs.isEmpty()) {
-                messageSender.sendMessage(chatId, "❌ Risultati scaduti. Riprova la ricerca con <code>/cerca " + drugName + "</code>");
+                messageSender.sendMessage(chatId, "Risultati scaduti. Riprova la ricerca con <code>/cerca " + drugName + "</code>");
                 return;
             }
-            
-            System.out.println("📋 Recuperati " + drugs.size() + " risultati dalla cache per offset " + offset);
         }
 
         //Paginazione: mostra 5 risultati per volta
         int pageSize = 5;
         int end = Math.min(offset + pageSize, drugs.size());
-        
-        System.out.println("📊 Mostrando risultati da " + offset + " a " + end + " (totali: " + drugs.size() + ")");
 
         //Costruisce la risposta formattata
         StringBuilder response = new StringBuilder();
-        response.append(String.format("✅ <b>%d risultati</b> per \"%s\":\n\n",
+        response.append(String.format("<b>%d risultati</b> per \"%s\":\n\n",
                 drugs.size(), drugName));
 
         //Formatta ogni farmaco della pagina corrente
         for (int i = offset; i < end; i++) {
             response.append(formatDrugInfo(drugs.get(i), i + 1));
-            if (i < end - 1) response.append("\n➖➖➖\n\n");
+            if (i < end - 1) response.append("\n---\n\n");
         }
 
         //Crea i bottoni inline per azioni rapide
@@ -116,7 +110,7 @@ public class SearchHandler implements CommandHandler {
         //Se ci sono altri risultati, aggiunge il bottone "Altri risultati"
         if (end < drugs.size()) {
             InlineKeyboardButton moreButton = InlineKeyboardButton.builder()
-                    .text(String.format("⬇️ Altri %d risultati", drugs.size() - end))
+                    .text(String.format("Altri %d risultati", drugs.size() - end))
                     .callbackData("moredrugs:" + drugName + ":" + end)
                     .build();
             rows.add(new InlineKeyboardRow(moreButton));
@@ -125,11 +119,11 @@ public class SearchHandler implements CommandHandler {
         //Riga di bottoni per azioni (Richiami e Salva)
         InlineKeyboardRow actionsRow = new InlineKeyboardRow();
         actionsRow.add(InlineKeyboardButton.builder()
-                .text("🔍 Richiami")
+                .text("Richiami")
                 .callbackData("recalls:" + drugName)
                 .build());
         actionsRow.add(InlineKeyboardButton.builder()
-                .text("⭐ Salva")
+                .text("Salva")
                 .callbackData("bookmark:" + drugName)
                 .build());
         rows.add(actionsRow);
@@ -150,18 +144,18 @@ public class SearchHandler implements CommandHandler {
 
         //Aggiunge il nome generico se disponibile
         if (drug.getGenericName() != null && !drug.getGenericName().isEmpty()) {
-            sb.append(String.format("   📋 <i>Principio attivo:</i> %s\n", drug.getGenericName()));
+            sb.append(String.format("   <i>Principio attivo:</i> %s\n", drug.getGenericName()));
         }
 
         //Aggiunge il produttore se disponibile
         if (drug.getManufacturer() != null && !drug.getManufacturer().isEmpty()) {
-            sb.append(String.format("   🏭 <i>Produttore:</i> %s\n", drug.getManufacturer()));
+            sb.append(String.format("   <i>Produttore:</i> %s\n", drug.getManufacturer()));
         }
 
         //Aggiunge le indicazioni terapeutiche se disponibili
         if (drug.getIndications() != null && !drug.getIndications().isEmpty()) {
             String indications = formatIndications(drug.getIndications());
-            sb.append("   💊 <i>Indicazioni:</i>\n");
+            sb.append("   <i>Indicazioni:</i>\n");
             sb.append(indications);
         }
 
@@ -185,7 +179,7 @@ public class SearchHandler implements CommandHandler {
                 formatted.append("   ...\n");
                 break;
             }
-            formatted.append("   • ").append(sentence.trim()).append("\n");
+            formatted.append("   ").append(sentence.trim()).append("\n");
             charCount += sentence.length();
         }
 

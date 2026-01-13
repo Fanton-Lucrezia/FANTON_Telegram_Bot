@@ -28,7 +28,7 @@ public class Main {
             try (TelegramBotsLongPollingApplication botsApplication = new TelegramBotsLongPollingApplication()) {
                 //Registra il bot con il token e lo collega all'istanza MedBot
                 botsApplication.registerBot(botToken, new MedBot());
-                System.out.println("✓ MedBot avviato. Premi Ctrl+C per interrompere.");
+                System.out.println("MedBot avviato. Premi Ctrl+C per interrompere.");
 
                 //Mantiene il thread principale attivo in modo che il bot continui a funzionare
                 //Senza questa riga, il programma si chiuderebbe immediatamente

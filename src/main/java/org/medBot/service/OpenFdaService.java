@@ -45,8 +45,6 @@ public class OpenFdaService {
     /*Cerca farmaci per nome chiamando sempre l'API OpenFDA
     Non usa cache per le ricerche perché deve restituire TUTTI i risultati trovati*/
     public List<Drug> searchDrug(String searchTerm) throws IOException {
-        System.out.println("🔍 Ricerca farmaco: " + searchTerm);
-
         //Codifica il termine di ricerca per URL (es. spazi diventano %20)
         String encodedTerm = URLEncoder.encode(searchTerm, StandardCharsets.UTF_8);
         //Costruisce la query per cercare sia nel brand name che nel generic name
@@ -68,7 +66,6 @@ public class OpenFdaService {
             //Controlla se la richiesta è andata a buon fine
             if (!response.isSuccessful()) {
                 if (response.code() == 404) {
-                    System.out.println("❌ 404 - Nessun risultato trovato");
                     return new ArrayList<>();
                 }
                 throw new IOException("Errore API FDA: " + response.code());
@@ -81,8 +78,6 @@ public class OpenFdaService {
 
             //Converte i risultati JSON in oggetti Drug
             List<Drug> drugs = parseDrugResults(root);
-            
-            System.out.println("✅ Trovati " + drugs.size() + " risultati");
 
             return drugs;
         }
@@ -209,8 +204,6 @@ public class OpenFdaService {
     Le sostanze controllate sono farmaci regolamentati (es. oppioidi, anfetamine)
     Schedule I-V indicano diversi livelli di controllo e potenziale abuso*/
     public String checkDrugSchedule(String drugName) throws IOException {
-        System.out.println("Verifica sostanza controllata: " + drugName);
-        
         String encodedTerm = URLEncoder.encode(drugName, StandardCharsets.UTF_8);
         
         //Prova diverse strategie di ricerca per massimizzare le possibilità di trovare il farmaco
@@ -227,7 +220,6 @@ public class OpenFdaService {
         //Prova ogni strategia di ricerca fino a trovare un risultato con dea_schedule
         for (int attempt = 0; attempt < queries.length; attempt++) {
             String url = String.format("%s/drug/label.json?search=%s&limit=10", FDA_BASE_URL, queries[attempt]);
-            System.out.println("Tentativo " + (attempt + 1) + ": " + url);
             
             Request request = new Request.Builder()
                     .url(url)
@@ -251,7 +243,6 @@ public class OpenFdaService {
                                     String schedule = schedules.get(0).asText();
                                     //Rimuove il prefisso "C" se presente (es. "CII" diventa "II")
                                     schedule = schedule.replaceAll("^C", "").replaceAll("^IV$|^V$|^III$|^II$|^I$", "$0");
-                                    System.out.println("✅ Trovato Schedule: " + schedule);
                                     return schedule;
                                 }
                             }
@@ -259,12 +250,11 @@ public class OpenFdaService {
                     }
                 }
             } catch (Exception e) {
-                System.out.println("❌ Errore query: " + e.getMessage());
+                //Continua con la prossima strategia
             }
         }
         
         //Se nessuna strategia ha trovato uno schedule, il farmaco non è controllato
-        System.out.println("❌ Nessun schedule trovato");
         return null;
     }
 
@@ -324,7 +314,7 @@ public class OpenFdaService {
                 }
 
             } catch (Exception e) {
-                System.out.println("Errore parsing farmaco: " + e.getMessage());
+                //Salta i farmaci con dati malformati
             }
         }
 
@@ -374,7 +364,7 @@ public class OpenFdaService {
                 recalls.add(recall);
 
             } catch (Exception e) {
-                System.out.println("Errore parsing richiamo: " + e.getMessage());
+                //Salta i richiami con dati malformati
             }
         }
 

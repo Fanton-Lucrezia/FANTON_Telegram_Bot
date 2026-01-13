@@ -1,17 +1,17 @@
-# 🤖 MedBot - Bot Telegram per Informazioni sui Farmaci
+# MedBot - Bot Telegram per Informazioni sui Farmaci
 
 Bot Telegram sviluppato in Java che fornisce informazioni sui farmaci utilizzando le API OpenFDA.
 
-## 🎯 Funzionalità
+## Funzionalità
 
-- 🔍 **Ricerca farmaci**: cerca informazioni complete sui farmaci
-- ⚠️ **Richiami FDA**: verifica se un farmaco è stato richiamato
-- 💊 **Eventi avversi**: consulta gli effetti collaterali riportati
-- 🔗 **Interazioni**: verifica interazioni tra più farmaci
-- ⭐ **Bookmark**: salva i farmaci preferiti
-- 📊 **Statistiche**: monitora le tue ricerche
+- Ricerca farmaci: cerca informazioni complete sui farmaci
+- Richiami FDA: verifica se un farmaco è stato richiamato
+- Eventi avversi: consulta gli effetti collaterali riportati
+- Interazioni: verifica interazioni tra più farmaci
+- Bookmark: salva i farmaci preferiti
+- Statistiche: monitora le tue ricerche
 
-## 🛠️ Tecnologie Utilizzate
+## Tecnologie Utilizzate
 
 - **Java 17+**
 - **TelegramBots API** - per l'interazione con Telegram
@@ -20,13 +20,13 @@ Bot Telegram sviluppato in Java che fornisce informazioni sui farmaci utilizzand
 - **SQLite** - per il database locale
 - **Maven** - per la gestione delle dipendenze
 
-## 💾 Installazione
+## Installazione
 
 ### Prerequisiti
 
 - Java 17 o superiore
 - Maven
-- Un bot Telegram (ottieni il token da [@BotFather](https://t.me/botfather))
+- Un bot Telegram (ottieni il token da @BotFather)
 
 ### Configurazione
 
@@ -36,11 +36,12 @@ Bot Telegram sviluppato in Java che fornisce informazioni sui farmaci utilizzand
    cd FANTON_Telegram_Bot
    ```
 
-2. **Configura il token del bot**
+2. **Crea il file di configurazione**
    
-   Crea il file `src/main/resources/config.properties`:
+   Crea `config.properties` nella root del progetto:
    ```properties
    BOT_TOKEN=il_tuo_token_qui
+   DB_PATH=./data/medbot.db
    ```
 
 3. **Compila il progetto**
@@ -55,47 +56,41 @@ Bot Telegram sviluppato in Java che fornisce informazioni sui farmaci utilizzand
    
    Oppure esegui direttamente da IntelliJ IDEA la classe `Main.java`
 
-## 📁 Struttura del Progetto
+## Struttura del Progetto
 
 ```
 FANTON_Telegram_Bot/
 ├── src/main/java/org/medBot/
-│   ├── Main.java                    # Entry point dell'applicazione
-│   ├── MyConfiguration.java         # Gestione configurazione
+│   ├── Main.java
+│   ├── MyConfiguration.java
 │   ├── bot/
-│   │   ├── MedBot.java              # Bot principale
-│   │   ├── CommandDispatcher.java   # Smistatore comandi
-│   │   └── MessageSender.java       # Helper invio messaggi
+│   │   ├── MedBot.java
+│   │   ├── CommandDispatcher.java
+│   │   └── MessageSender.java
 │   ├── handler/
-│   │   ├── CommandHandler.java      # Interfaccia handler
+│   │   ├── CommandHandler.java
 │   │   ├── StartHandler.java
-│   │   ├── HelpHandler.java
 │   │   ├── SearchHandler.java
-│   │   ├── RecallsHandler.java
-│   │   ├── AdverseEventsHandler.java
-│   │   ├── InteractionsHandler.java
-│   │   ├── StatsHandler.java
-│   │   ├── RecentHandler.java
-│   │   └── BookmarksHandler.java
+│   │   └── ...
 │   ├── service/
-│   │   ├── OpenFdaService.java      # Interazione con API FDA
-│   │   ├── BookmarkService.java     # Gestione preferiti
-│   │   └── StatisticsService.java   # Gestione statistiche
+│   │   ├── OpenFdaService.java
+│   │   ├── BookmarkService.java
+│   │   └── StatisticsService.java
 │   ├── dao/
-│   │   └── DatabaseManager.java     # Gestione database SQLite
+│   │   └── DatabaseManager.java
 │   └── model/
-│       ├── Drug.java                # Modello farmaco
-│       └── Recall.java              # Modello richiamo
-├── src/main/resources/
-│   └── config.properties            # Configurazione (da creare)
-├── medbot.db                        # Database SQLite (creato automaticamente)
-├── pom.xml                          # Dipendenze Maven
+│       ├── Drug.java
+│       └── Recall.java
+├── data/
+│   └── medbot.db (creato automaticamente)
+├── config.properties (da creare)
+├── pom.xml
 └── README.md
 ```
 
-## 📈 Database
+## Database
 
-Il bot utilizza SQLite per memorizzare dati localmente. Il database viene creato automaticamente all'avvio.
+Il bot utilizza SQLite per memorizzare dati localmente. Il database viene creato automaticamente in `./data/medbot.db`.
 
 ### Tabelle
 
@@ -104,17 +99,18 @@ Il bot utilizza SQLite per memorizzare dati localmente. Il database viene creato
 - **bookmarks**: farmaci salvati nei preferiti
 - **drugs_cache**: cache farmaci (riduce chiamate API)
 
-### Visualizzare il Database
+### Visualizzare il Database in IntelliJ IDEA
 
-In IntelliJ IDEA:
 1. Apri **Database** tool (View → Tool Windows → Database)
 2. Clicca **+** → Data Source → SQLite
-3. Seleziona `medbot.db` nella root del progetto
-4. Naviga tra le tabelle per vedere i dati
+3. Seleziona il file `data/medbot.db`
+4. Clicca **Test Connection** → **Apply** → **OK**
+5. Espandi le tabelle per visualizzare i dati
+6. Fai **click destro** → **Refresh** per aggiornare i dati
 
-**Nota**: Il file `medbot.db` è nel `.gitignore` e non viene caricato su GitHub. Ogni utente ha il proprio database locale.
+**Nota**: Il database è nel `.gitignore` e non viene caricato su GitHub.
 
-## 📝 Comandi Disponibili
+## Comandi Disponibili
 
 | Comando | Descrizione |
 |---------|-------------|
@@ -131,16 +127,16 @@ In IntelliJ IDEA:
 | `/stats` | Statistiche globali del bot |
 | `/recenti` | Le tue ultime ricerche |
 
-## 🚀 Utilizzo
+## Utilizzo
 
 1. Avvia una chat con il bot su Telegram
 2. Invia `/start` per iniziare
 3. Usa `/cerca aspirin` per cercare un farmaco
 4. Clicca sui bottoni inline per azioni rapide
-5. Salva i farmaci preferiti con "⭐ Salva"
+5. Salva i farmaci preferiti con il bottone "Salva"
 6. Monitora le tue statistiche con `/mystats`
 
-## 🔍 API Utilizzate
+## API Utilizzate
 
 - **OpenFDA Drug Label API**: informazioni sui farmaci approvati FDA
 - **OpenFDA Drug Enforcement API**: richiami e provvedimenti FDA
@@ -148,7 +144,7 @@ In IntelliJ IDEA:
 
 Tutte le API sono gratuite e pubbliche (nessuna chiave richiesta).
 
-## 📚 Architettura
+## Architettura
 
 ### Pattern Command con Dispatcher
 
@@ -156,11 +152,6 @@ Il bot utilizza il pattern **Command** con un **Dispatcher centrale**:
 
 ```
 MedBot → CommandDispatcher → Handler Specifico
-                │
-                ├──→ StartHandler
-                ├──→ SearchHandler  
-                ├──→ RecallsHandler
-                └──→ ...
 ```
 
 Ogni handler implementa l'interfaccia `CommandHandler` e gestisce un comando specifico.
@@ -176,19 +167,15 @@ I servizi sono separati dalla logica dei comandi:
 
 `DatabaseManager` gestisce tutte le operazioni sul database con pattern Singleton.
 
-## ⚠️ Note Importanti
+## Note Importanti
 
 - Il file `config.properties` con il token del bot NON è nel repository (per sicurezza)
-- Il database `medbot.db` è locale e NON sincronizzato su GitHub
+- Il database `./data/medbot.db` è locale e NON sincronizzato su GitHub
 - Le API FDA hanno limiti di rate (240 richieste/minuto)
 - I dati della cache vengono mantenuti per 24 ore
 
-## 👥 Autore
+## Autore
 
 Progetto scolastico per la materia TPSIT - 5° superiore
 
-**Repository**: [FANTON_Telegram_Bot](https://github.com/Fanton-Lucrezia/FANTON_Telegram_Bot)
-
-## 📝 Licenza
-
-Progetto didattico - Nessuna licenza specifica
+**Repository**: https://github.com/Fanton-Lucrezia/FANTON_Telegram_Bot
